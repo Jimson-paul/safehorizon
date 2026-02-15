@@ -1,0 +1,56 @@
+# =========================
+# FLUTTER / DART
+# =========================
+.dart_tool/
+.packages
+.pub/
+.pub-cache/
+build/
+coverage/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# =========================
+# ANDROID
+# =========================
+android/.gradle/
+android/local.properties
+android/app/debug/
+android/app/profile/
+android/app/release/
+
+# =========================
+# IOS (safe to keep even on Windows)
+# =========================
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/.last_build_id
+
+# =========================
+# PYTHON BACKEND (FastAPI)
+# =========================
+backend/venv/
+backend/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# =========================
+# IDE FILES
+# =========================
+.vscode/
+.idea/
+*.iml
+
+# =========================
+# LOGS & TEMP FILES
+# =========================
+*.log
+*.swp
+*.tmp
+
+# =========================
+# OS JUNK
+# =========================
+.DS_Store
+Thumbs.db
