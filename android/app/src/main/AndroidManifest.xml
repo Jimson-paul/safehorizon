@@ -1,7 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- ✅ REQUIRED for OpenStreetMap / API calls -->
+    <!-- ✅ INTERNET (for API + OpenStreetMap tiles) -->
     <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- ✅ LOCATION PERMISSIONS (FOR GPS) -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
 
     <application
         android:label="safehorizon"

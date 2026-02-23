@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'services/api_service.dart';
 import 'register_screen.dart';
 import 'dashboard_screen.dart';
+import 'admin_screen.dart'; // ✅ ADD THIS
 
 void main() {
   runApp(const SafeHorizonApp());
@@ -16,7 +17,14 @@ class SafeHorizonApp extends StatelessWidget {
       title: 'Safe Horizon',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(useMaterial3: true, fontFamily: 'Roboto'),
+
+      // ✅ NORMAL USER APP
       home: const LoginScreen(),
+
+      // ===============================
+      // ✅ ADMIN TEST MODE (UNCOMMENT TO TEST ADMIN)
+      // home: const AdminScreen(),
+      // ===============================
     );
   }
 }
@@ -35,7 +43,6 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
 
-  /// ✅ prevent memory leaks
   @override
   void dispose() {
     emailController.dispose();
@@ -43,7 +50,7 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  /// ================= LOGIN FUNCTION =================
+  // ================= LOGIN FUNCTION =================
   Future<void> loginUser() async {
     String email = emailController.text.trim();
     String password = passwordController.text.trim();
@@ -57,24 +64,38 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoading = true);
 
-    bool success = await ApiService.login(email, password);
+    final result = await ApiService.login(email, password);
 
     if (!mounted) return;
 
     setState(() => _isLoading = false);
 
-    if (success) {
+    if (result != null && result["message"] == "Login successful") {
+      String name = result["name"];
+      String userEmail = result["email"];
+      String? userPhone = result["phone"];
+
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text("Login Successful ✅")));
 
-      /// small delay so snackbar appears smoothly
       await Future.delayed(const Duration(milliseconds: 400));
 
-      /// ✅ GO TO DASHBOARD
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const DashboardScreen()),
+        MaterialPageRoute(
+          builder: (_) => DashboardScreen(
+            userName: name,
+            userEmail: userEmail,
+            userPhone: userPhone,
+          ),
+        ),
+      );
+    } else if (result?["error"] == "not_verified") {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Verify your email and create password first 📧"),
+        ),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -83,14 +104,13 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  /// ================= UI =================
+  // ================= UI =================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
         width: double.infinity,
         height: double.infinity,
-
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
@@ -98,15 +118,13 @@ class _LoginScreenState extends State<LoginScreen> {
             colors: [Color(0xFFE3F2FD), Color(0xFFBBDEFB)],
           ),
         ),
-
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-
               child: Column(
                 children: [
-                  /// ---------- LOGO ----------
+                  /// LOGO
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -131,39 +149,18 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
 
-                  const SizedBox(height: 8),
-
-                  const Text(
-                    "Safe Navigation. Safer Roads.",
-                    style: TextStyle(fontSize: 16, color: Color(0xFF546E7A)),
-                  ),
-
                   const SizedBox(height: 48),
 
-                  /// ---------- EMAIL ----------
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.9),
-                      borderRadius: BorderRadius.circular(50),
-                    ),
-                    child: TextField(
-                      controller: emailController,
-                      keyboardType: TextInputType.emailAddress,
-                      decoration: const InputDecoration(
-                        hintText: "Email",
-                        border: InputBorder.none,
-                        prefixIcon: Icon(
-                          Icons.email_outlined,
-                          color: Color(0xFF1976D2),
-                        ),
-                        contentPadding: EdgeInsets.symmetric(vertical: 20),
-                      ),
-                    ),
+                  /// EMAIL
+                  _inputField(
+                    controller: emailController,
+                    hint: "Email",
+                    icon: Icons.email_outlined,
                   ),
 
                   const SizedBox(height: 20),
 
-                  /// ---------- PASSWORD ----------
+                  /// PASSWORD
                   Container(
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.9),
@@ -200,38 +197,21 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   const SizedBox(height: 40),
 
-                  /// ---------- LOGIN BUTTON ----------
-                  Container(
+                  /// LOGIN BUTTON
+                  SizedBox(
                     width: double.infinity,
                     height: 60,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(50),
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF1976D2), Color(0xFF00BCD4)],
-                      ),
-                    ),
                     child: ElevatedButton(
                       onPressed: _isLoading ? null : loginUser,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.transparent,
-                        shadowColor: Colors.transparent,
-                      ),
                       child: _isLoading
-                          ? const CircularProgressIndicator(color: Colors.white)
-                          : const Text(
-                              "Login",
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
+                          ? const CircularProgressIndicator()
+                          : const Text("Login"),
                     ),
                   ),
 
                   const SizedBox(height: 32),
 
-                  /// ---------- REGISTER ----------
+                  /// REGISTER LINK
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -241,7 +221,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => const RegisterScreen(),
+                              builder: (_) => const RegisterScreen(),
                             ),
                           );
                         },
@@ -260,6 +240,28 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _inputField({
+    required TextEditingController controller,
+    required String hint,
+    required IconData icon,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(50),
+      ),
+      child: TextField(
+        controller: controller,
+        decoration: InputDecoration(
+          hintText: hint,
+          border: InputBorder.none,
+          prefixIcon: Icon(icon, color: const Color(0xFF1976D2)),
+          contentPadding: const EdgeInsets.symmetric(vertical: 20),
         ),
       ),
     );

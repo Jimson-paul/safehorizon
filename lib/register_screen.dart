@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'services/api_service.dart';
+import 'main.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -9,90 +10,295 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
-  final TextEditingController emailController = TextEditingController();
-  final TextEditingController passwordController = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+
+  // ================= CONTROLLERS =================
+  final nameController = TextEditingController();
+  final phoneController = TextEditingController(); // ✅ NEW
+  final emailController = TextEditingController();
+  final codeController = TextEditingController();
+  final passwordController = TextEditingController();
 
   bool isLoading = false;
+  bool codeSent = false;
+  bool emailVerified = false;
 
   @override
   void dispose() {
+    nameController.dispose();
+    phoneController.dispose(); // ✅ dispose phone
     emailController.dispose();
+    codeController.dispose();
     passwordController.dispose();
     super.dispose();
   }
 
-  Future<void> registerUser() async {
-    String email = emailController.text.trim();
-    String password = passwordController.text.trim();
+  // =====================================================
+  // STEP 1: GENERATE / RESEND OTP
+  // =====================================================
+  Future<void> generateCode() async {
+    if (!_formKey.currentState!.validate()) return;
 
-    if (email.isEmpty || password.isEmpty) {
+    String name = nameController.text.trim();
+    String email = emailController.text.trim();
+
+    // ✅ OPTIONAL PHONE
+    String? phone = phoneController.text.trim().isEmpty
+        ? null
+        : phoneController.text.trim();
+
+    setState(() => isLoading = true);
+
+    // ✅ SEND NAME + EMAIL + PHONE
+    String result = await ApiService.register(name, email, phone);
+
+    if (!mounted) return;
+
+    setState(() => isLoading = false);
+
+    if (result == "success") {
+      setState(() => codeSent = true);
+
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text("Enter email and password")));
+      ).showSnackBar(const SnackBar(content: Text("OTP sent to email 📧")));
+    } else if (result == "exists") {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Email already registered. Please login."),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Failed to send OTP ❌")));
+    }
+  }
+
+  // =====================================================
+  // STEP 2: VERIFY OTP
+  // =====================================================
+  Future<void> verifyCode() async {
+    String email = emailController.text.trim();
+    String code = codeController.text.trim();
+
+    if (code.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Enter verification code")));
       return;
     }
 
     setState(() => isLoading = true);
 
-    bool success = await ApiService.register(email, password);
+    bool success = await ApiService.verifyEmail(email, code);
+
+    if (!mounted) return;
+
+    setState(() {
+      isLoading = false;
+      emailVerified = success;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(success ? "Email verified ✅" : "Invalid code ❌")),
+    );
+  }
+
+  // =====================================================
+  // STEP 3: CREATE PASSWORD
+  // =====================================================
+  Future<void> createPassword() async {
+    String email = emailController.text.trim();
+    String password = passwordController.text.trim();
+
+    if (password.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Password must be 6+ characters")),
+      );
+      return;
+    }
+
+    setState(() => isLoading = true);
+
+    bool success = await ApiService.setPassword(email, password);
 
     if (!mounted) return;
 
     setState(() => isLoading = false);
 
     if (success) {
-      /// ✅ SHOW SUCCESS MESSAGE
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Registration Successful ✅")),
+        const SnackBar(content: Text("Account created successfully ✅")),
       );
 
-      /// ✅ WAIT so user can see message
-      await Future.delayed(const Duration(seconds: 1));
+      await Future.delayed(const Duration(milliseconds: 600));
 
-      /// ✅ GO BACK TO LOGIN PAGE
-      Navigator.pop(context);
-    } else {
-      ScaffoldMessenger.of(
+      Navigator.pushReplacement(
         context,
-      ).showSnackBar(const SnackBar(content: Text("Registration Failed ❌")));
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Failed to create account ❌")),
+      );
     }
   }
 
+  // =====================================================
+  // UI
+  // =====================================================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Register")),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            TextField(
-              controller: emailController,
-              decoration: const InputDecoration(labelText: "Email"),
-            ),
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFFE3F2FD), Color(0xFFBBDEFB)],
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  children: [
+                    /// LOGO
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white.withOpacity(0.5),
+                      ),
+                      child: const Icon(
+                        Icons.shield_rounded,
+                        size: 80,
+                        color: Color(0xFF1976D2),
+                      ),
+                    ),
 
-            const SizedBox(height: 20),
+                    const SizedBox(height: 24),
 
-            TextField(
-              controller: passwordController,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: "Password"),
-            ),
+                    const Text(
+                      "Create Account",
+                      style: TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF0D47A1),
+                      ),
+                    ),
 
-            const SizedBox(height: 30),
+                    const SizedBox(height: 40),
 
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: isLoading ? null : registerUser,
-                child: isLoading
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text("Register"),
+                    /// NAME
+                    _inputField(
+                      controller: nameController,
+                      hint: "Full Name",
+                      icon: Icons.person_outline,
+                      enabled: !codeSent,
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    /// ✅ PHONE (OPTIONAL)
+                    _inputField(
+                      controller: phoneController,
+                      hint: "Phone Number (Optional)",
+                      icon: Icons.phone_outlined,
+                      enabled: !codeSent,
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    /// EMAIL
+                    _inputField(
+                      controller: emailController,
+                      hint: "Email",
+                      icon: Icons.email_outlined,
+                      enabled: !codeSent,
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    if (!codeSent) _mainButton("Generate Code", generateCode),
+
+                    /// OTP
+                    if (codeSent && !emailVerified) ...[
+                      _inputField(
+                        controller: codeController,
+                        hint: "Verification Code",
+                        icon: Icons.verified_user_outlined,
+                      ),
+                      const SizedBox(height: 20),
+                      _mainButton("Verify Code", verifyCode),
+                    ],
+
+                    /// PASSWORD
+                    if (emailVerified) ...[
+                      _inputField(
+                        controller: passwordController,
+                        hint: "Create Password",
+                        icon: Icons.lock_outline,
+                        obscure: true,
+                      ),
+                      const SizedBox(height: 20),
+                      _mainButton("Create Account", createPassword),
+                    ],
+                  ],
+                ),
               ),
             ),
-          ],
+          ),
         ),
+      ),
+    );
+  }
+
+  // =====================================================
+  // INPUT FIELD
+  // =====================================================
+  Widget _inputField({
+    required TextEditingController controller,
+    required String hint,
+    required IconData icon,
+    bool obscure = false,
+    bool enabled = true,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(50),
+      ),
+      child: TextFormField(
+        controller: controller,
+        obscureText: obscure,
+        enabled: enabled,
+        decoration: InputDecoration(
+          hintText: hint,
+          border: InputBorder.none,
+          prefixIcon: Icon(icon, color: const Color(0xFF1976D2)),
+          contentPadding: const EdgeInsets.symmetric(vertical: 20),
+        ),
+      ),
+    );
+  }
+
+  // =====================================================
+  // BUTTON
+  // =====================================================
+  Widget _mainButton(String text, VoidCallback onPressed) {
+    return SizedBox(
+      width: double.infinity,
+      height: 60,
+      child: ElevatedButton(
+        onPressed: isLoading ? null : onPressed,
+        child: isLoading ? const CircularProgressIndicator() : Text(text),
       ),
     );
   }

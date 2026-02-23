@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Safe Horizon Admin</title>
+
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial;
+            background: #f4f6f8;
+            display: flex;
+        }
+
+        /* ===== SIDEBAR ===== */
+        .sidebar {
+            width: 220px;
+            height: 100vh;
+            background: #1f3b57;
+            color: white;
+            padding-top: 20px;
+        }
+
+        .sidebar h2 {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .menu-btn {
+            display: block;
+            width: 100%;
+            padding: 14px;
+            border: none;
+            background: none;
+            color: white;
+            text-align: left;
+            cursor: pointer;
+            font-size: 15px;
+        }
+
+        .menu-btn:hover {
+            background: #2f567d;
+        }
+
+        .active {
+            background: #2f567d;
+        }
+
+        /* ===== MAIN CONTENT ===== */
+        .main {
+            flex: 1;
+            padding: 30px;
+        }
+
+        .card {
+            background: white;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        }
+
+        img.report-img {
+            width: 350px;
+            border-radius: 10px;
+            margin: 10px 0;
+            display: block;
+        }
+
+        button.action {
+            padding: 8px 12px;
+            margin-right: 10px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            color: white;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .approve { background: green; }
+        .reject { background: red; }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+
+<!-- ===== SIDEBAR ===== -->
+<div class="sidebar">
+    <h2>🚦 Admin</h2>
+
+    <button id="userReportsBtn"
+            class="menu-btn"
+            onclick="showSection('userReports')">
+        User Reports
+    </button>
+</div>
+
+<!-- ===== MAIN AREA ===== -->
+<div class="main">
+
+    <h2>Safe Horizon Admin Panel</h2>
+
+    <div id="userReportsSection" class="hidden">
+        <h3>Pending User Reports</h3>
+        <div id="reports"></div>
+    </div>
+
+</div>
+
+<script>
+
+/* ================= SECTION CONTROL ================= */
+
+function hideAllSections() {
+    document.getElementById("userReportsSection")
+        .classList.add("hidden");
+
+    document.getElementById("userReportsBtn")
+        .classList.remove("active");
+}
+
+function showSection(sectionName) {
+
+    hideAllSections();
+
+    if (sectionName === "userReports") {
+        document.getElementById("userReportsSection")
+            .classList.remove("hidden");
+
+        document.getElementById("userReportsBtn")
+            .classList.add("active");
+
+        loadReports();
+    }
+}
+
+
+/* ================= LOAD REPORTS ================= */
+
+async function loadReports() {
+
+    const container = document.getElementById("reports");
+    container.innerHTML = "Loading reports...";
+
+    try {
+
+        const response =
+            await fetch("http://127.0.0.1:8000/admin/pending-reports");
+
+        const data = await response.json();
+
+        container.innerHTML = "";
+
+        if (!data.length) {
+            container.innerHTML = "<p>No pending reports ✅</p>";
+            return;
+        }
+
+        data.forEach(report => {
+
+            const div = document.createElement("div");
+            div.className = "card";
+
+            div.innerHTML = `
+                <b>ID:</b> ${report.id}<br>
+                <b>User:</b> ${report.user_email}<br>
+                <b>Severity:</b> ${report.severity}<br>
+                <b>Description:</b> ${report.description || "None"}<br>
+                <b>Location:</b> ${report.latitude}, ${report.longitude}<br>
+
+                ${
+                    report.image_url
+                    ? `<img class="report-img" src="${report.image_url}">`
+                    : ""
+                }
+
+                <br>
+
+                <button class="action approve"
+                    onclick="approve(${report.id}, this)">
+                    Approve
+                </button>
+
+                <button class="action reject"
+                    onclick="reject(${report.id}, this)">
+                    Reject
+                </button>
+            `;
+
+            container.appendChild(div);
+        });
+
+    } catch (error) {
+        container.innerHTML =
+            "<p style='color:red'>Failed to load reports ❌</p>";
+        console.error(error);
+    }
+}
+
+
+/* ================= APPROVE ================= */
+
+async function approve(id, btn) {
+
+    btn.disabled = true;
+    btn.innerText = "Approving...";
+
+    try {
+        await fetch(
+            `http://127.0.0.1:8000/admin/approve/${id}`,
+            { method: "PUT" }
+        );
+
+        loadReports();
+
+    } catch (err) {
+        alert("Failed to approve report");
+        btn.disabled = false;
+        btn.innerText = "Approve";
+    }
+}
+
+
+/* ================= REJECT ================= */
+
+async function reject(id, btn) {
+
+    btn.disabled = true;
+    btn.innerText = "Rejecting...";
+
+    try {
+        await fetch(
+            `http://127.0.0.1:8000/admin/reject/${id}`,
+            { method: "PUT" }
+        );
+
+        loadReports();
+
+    } catch (err) {
+        alert("Failed to reject report");
+        btn.disabled = false;
+        btn.innerText = "Reject";
+    }
+}
+
+
+/* ================= AUTO LOAD ================= */
+
+showSection('userReports');
+
+</script>
+
+</body>
+</html>
