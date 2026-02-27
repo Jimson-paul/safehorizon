@@ -13,12 +13,15 @@ class User(Base):
     # user basic info
     name = Column(String(100), nullable=False)
 
-    # ✅ OPTIONAL PHONE NUMBER (NEW)
+    # OPTIONAL PHONE NUMBER
     phone = Column(String(20), nullable=True)
 
     # credentials
     email = Column(String(100), unique=True, index=True, nullable=False)
     password = Column(String(255), nullable=False)
+
+    # ✅ PROFILE IMAGE (NEW - PERMANENT STORAGE)
+    profile_image = Column(String(255), nullable=True)
 
     # email verification
     is_verified = Column(Boolean, default=False)

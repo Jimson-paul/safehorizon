@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'services/api_service.dart';
 import 'register_screen.dart';
 import 'dashboard_screen.dart';
-import 'admin_screen.dart'; // ✅ ADD THIS
+import 'admin_screen.dart';
+import 'forgot_password_screen.dart';
 
 void main() {
   runApp(const SafeHorizonApp());
@@ -16,15 +17,12 @@ class SafeHorizonApp extends StatelessWidget {
     return MaterialApp(
       title: 'Safe Horizon',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(useMaterial3: true, fontFamily: 'Roboto'),
-
-      // ✅ NORMAL USER APP
+      theme: ThemeData(
+        useMaterial3: true,
+        fontFamily: 'Roboto',
+        colorSchemeSeed: const Color(0xFF1976D2),
+      ),
       home: const LoginScreen(),
-
-      // ===============================
-      // ✅ ADMIN TEST MODE (UNCOMMENT TO TEST ADMIN)
-      // home: const AdminScreen(),
-      // ===============================
     );
   }
 }
@@ -52,6 +50,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   // ================= LOGIN FUNCTION =================
   Future<void> loginUser() async {
+    FocusScope.of(context).unfocus();
+
     String email = emailController.text.trim();
     String password = passwordController.text.trim();
 
@@ -107,136 +107,178 @@ class _LoginScreenState extends State<LoginScreen> {
   // ================= UI =================
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFFE3F2FD), Color(0xFFBBDEFB)],
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: Scaffold(
+        body: Container(
+          width: double.infinity,
+          height: double.infinity,
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFFE3F2FD), Color(0xFFBBDEFB)],
+            ),
           ),
-        ),
-        child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-              child: Column(
-                children: [
-                  /// LOGO
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.white.withOpacity(0.5),
+          child: SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 24,
+                ),
+                child: Column(
+                  children: [
+                    /// LOGO
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white.withOpacity(0.5),
+                      ),
+                      child: const CircleAvatar(
+                        radius: 45,
+                        backgroundColor: Colors.transparent,
+                        backgroundImage: AssetImage('assets/images/logo.png'),
+                      ),
                     ),
-                    child: const Icon(
-                      Icons.shield_rounded,
-                      size: 80,
-                      color: Color(0xFF1976D2),
+
+                    const SizedBox(height: 24),
+
+                    const Text(
+                      "Safe Horizon",
+                      style: TextStyle(
+                        fontSize: 34,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF0D47A1),
+                      ),
                     ),
-                  ),
 
-                  const SizedBox(height: 24),
+                    const SizedBox(height: 48),
 
-                  const Text(
-                    "Safe Horizon",
-                    style: TextStyle(
-                      fontSize: 34,
-                      fontWeight: FontWeight.w900,
-                      color: Color(0xFF0D47A1),
+                    /// EMAIL
+                    _inputField(
+                      controller: emailController,
+                      hint: "Email",
+                      icon: Icons.email_outlined,
                     ),
-                  ),
 
-                  const SizedBox(height: 48),
+                    const SizedBox(height: 20),
 
-                  /// EMAIL
-                  _inputField(
-                    controller: emailController,
-                    hint: "Email",
-                    icon: Icons.email_outlined,
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  /// PASSWORD
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.9),
-                      borderRadius: BorderRadius.circular(50),
-                    ),
-                    child: TextField(
-                      controller: passwordController,
-                      obscureText: !_isPasswordVisible,
-                      decoration: InputDecoration(
-                        hintText: "Password",
-                        border: InputBorder.none,
-                        prefixIcon: const Icon(
-                          Icons.lock_outline_rounded,
-                          color: Color(0xFF1976D2),
-                        ),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _isPasswordVisible
-                                ? Icons.visibility
-                                : Icons.visibility_off,
+                    /// PASSWORD
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.9),
+                        borderRadius: BorderRadius.circular(50),
+                      ),
+                      child: TextField(
+                        controller: passwordController,
+                        obscureText: !_isPasswordVisible,
+                        decoration: InputDecoration(
+                          hintText: "Password",
+                          border: InputBorder.none,
+                          prefixIcon: const Icon(
+                            Icons.lock_outline_rounded,
+                            color: Color(0xFF1976D2),
                           ),
-                          onPressed: () {
-                            setState(() {
-                              _isPasswordVisible = !_isPasswordVisible;
-                            });
-                          },
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          vertical: 20,
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _isPasswordVisible
+                                  ? Icons.visibility
+                                  : Icons.visibility_off,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _isPasswordVisible = !_isPasswordVisible;
+                              });
+                            },
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 20,
+                          ),
                         ),
                       ),
                     ),
-                  ),
 
-                  const SizedBox(height: 40),
-
-                  /// LOGIN BUTTON
-                  SizedBox(
-                    width: double.infinity,
-                    height: 60,
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : loginUser,
-                      child: _isLoading
-                          ? const CircularProgressIndicator()
-                          : const Text("Login"),
-                    ),
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  /// REGISTER LINK
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Text("New user? "),
-                      GestureDetector(
-                        onTap: () {
+                    /// FORGOT PASSWORD
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => const RegisterScreen(),
+                              builder: (_) => const ForgotPasswordScreen(),
                             ),
                           );
                         },
                         child: const Text(
-                          "Register here",
+                          "Forgot Password?",
                           style: TextStyle(
                             color: Color(0xFF1976D2),
-                            fontWeight: FontWeight.bold,
-                            decoration: TextDecoration.underline,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ),
-                    ],
-                  ),
-                ],
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    /// LOGIN BUTTON
+                    SizedBox(
+                      width: double.infinity,
+                      height: 60,
+                      child: ElevatedButton(
+                        onPressed: _isLoading ? null : loginUser,
+                        style: ElevatedButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        child: _isLoading
+                            ? const SizedBox(
+                                height: 24,
+                                width: 24,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 3,
+                                ),
+                              )
+                            : const Text(
+                                "Login",
+                                style: TextStyle(fontSize: 18),
+                              ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 32),
+
+                    /// REGISTER LINK
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text("New user? "),
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const RegisterScreen(),
+                              ),
+                            );
+                          },
+                          child: const Text(
+                            "Register here",
+                            style: TextStyle(
+                              color: Color(0xFF1976D2),
+                              fontWeight: FontWeight.bold,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -245,6 +287,7 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  // ================= INPUT FIELD =================
   Widget _inputField({
     required TextEditingController controller,
     required String hint,

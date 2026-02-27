@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'dart:io';
 import 'map_picker_screen.dart';
+import 'utils/app_toast.dart'; // ✅ NEW
 
 class ReportAccidentScreen extends StatefulWidget {
   final String userEmail;
@@ -121,9 +122,12 @@ class _ReportAccidentScreenState extends State<ReportAccidentScreen> {
     if (isSubmitting) return;
 
     if (latitude == null || longitude == null) {
-      ScaffoldMessenger.of(
+      AppToast.show(
         context,
-      ).showSnackBar(const SnackBar(content: Text("Location not available")));
+        "Location not available",
+        color: Colors.orange,
+        icon: Icons.location_off,
+      );
       return;
     }
 
@@ -131,10 +135,9 @@ class _ReportAccidentScreenState extends State<ReportAccidentScreen> {
 
     final request = http.MultipartRequest(
       "POST",
-      Uri.parse("http://10.0.2.2:8000/report-accident"),
+      Uri.parse("http://127.0.0.1:8000/report-accident"),
     );
 
-    /// ✅ REAL USER EMAIL (THE IMPORTANT FIX)
     request.fields["user_email"] = widget.userEmail;
     request.fields["latitude"] = latitude.toString();
     request.fields["longitude"] = longitude.toString();
@@ -155,14 +158,20 @@ class _ReportAccidentScreenState extends State<ReportAccidentScreen> {
     setState(() => isSubmitting = false);
 
     if (response.statusCode == 200) {
-      ScaffoldMessenger.of(
+      AppToast.show(
         context,
-      ).showSnackBar(const SnackBar(content: Text("Report Submitted ✅")));
+        "Report Submitted ✅",
+        color: Colors.green,
+        icon: Icons.check_circle,
+      );
 
-      Navigator.pop(context, true); // ✅ notify previous screen
+      Navigator.pop(context, true);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Failed to submit report ❌")),
+      AppToast.show(
+        context,
+        "Failed to submit report ❌",
+        color: Colors.red,
+        icon: Icons.error,
       );
     }
   }
@@ -195,7 +204,6 @@ class _ReportAccidentScreenState extends State<ReportAccidentScreen> {
 
             const SizedBox(height: 20),
 
-            /// LOCATION
             const Text("Location (GPS)"),
             const SizedBox(height: 6),
 
@@ -230,7 +238,6 @@ class _ReportAccidentScreenState extends State<ReportAccidentScreen> {
 
             const SizedBox(height: 16),
 
-            /// DATE TIME
             const Text("Date & Time"),
             const SizedBox(height: 6),
 
@@ -254,7 +261,6 @@ class _ReportAccidentScreenState extends State<ReportAccidentScreen> {
 
             const SizedBox(height: 20),
 
-            /// SEVERITY
             const Text("Severity"),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -271,7 +277,6 @@ class _ReportAccidentScreenState extends State<ReportAccidentScreen> {
 
             const SizedBox(height: 20),
 
-            /// IMAGE
             const Text("Incident Image (Optional)"),
             const SizedBox(height: 8),
 
@@ -300,7 +305,6 @@ class _ReportAccidentScreenState extends State<ReportAccidentScreen> {
 
             const SizedBox(height: 20),
 
-            /// DESCRIPTION
             const Text("Description (Optional)"),
             TextField(
               controller: descriptionController,
@@ -317,7 +321,6 @@ class _ReportAccidentScreenState extends State<ReportAccidentScreen> {
 
             const SizedBox(height: 30),
 
-            /// SUBMIT
             SizedBox(
               width: double.infinity,
               height: 50,

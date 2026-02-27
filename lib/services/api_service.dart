@@ -1,12 +1,12 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 
 class ApiService {
   // Android Emulator localhost
-  static const String baseUrl = "http://10.0.2.2:8000";
-
+  static const String baseUrl = "http://127.0.0.1:8000";
   // =====================================================
-  // REGISTER (NAME + EMAIL + OPTIONAL PHONE)
+  // REGISTER
   // =====================================================
   static Future<String> register(
     String name,
@@ -29,7 +29,7 @@ class ApiService {
   }
 
   // =====================================================
-  // VERIFY EMAIL (OTP)
+  // VERIFY EMAIL
   // =====================================================
   static Future<bool> verifyEmail(String email, String code) async {
     final response = await http.post(
@@ -77,7 +77,40 @@ class ApiService {
   }
 
   // =====================================================
-  // FORGOT PASSWORD - SEND RESET CODE
+  // ✅ GET USER PROFILE (NEW)
+  // =====================================================
+  static Future<Map<String, dynamic>?> getUserProfile(String email) async {
+    final response = await http.get(Uri.parse("$baseUrl/user/$email"));
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      return null;
+    }
+  }
+
+  // =====================================================
+  // ✅ UPLOAD PROFILE IMAGE (NEW)
+  // =====================================================
+  static Future<bool> uploadProfileImage(String email, File imageFile) async {
+    var request = http.MultipartRequest(
+      "POST",
+      Uri.parse("$baseUrl/upload-profile-image"),
+    );
+
+    request.fields["email"] = email;
+
+    request.files.add(
+      await http.MultipartFile.fromPath("image", imageFile.path),
+    );
+
+    var response = await request.send();
+
+    return response.statusCode == 200;
+  }
+
+  // =====================================================
+  // FORGOT PASSWORD
   // =====================================================
   static Future<bool> forgotPassword(String email) async {
     final response = await http.post(
@@ -116,7 +149,7 @@ class ApiService {
   }
 
   // =====================================================
-  // GET USER ACCIDENT REPORT STATUS
+  // USER REPORT STATUS
   // =====================================================
   static Future<List<dynamic>> getUserReports(String email) async {
     final response = await http.get(Uri.parse("$baseUrl/user/reports/$email"));
@@ -139,11 +172,8 @@ class ApiService {
     return response.statusCode == 200;
   }
 
-  // =====================================================
   // ================= ADMIN APIs =================
-  // =====================================================
 
-  // GET PENDING REPORTS
   static Future<List<dynamic>> getPendingReports() async {
     final response = await http.get(
       Uri.parse("$baseUrl/admin/pending-reports"),
@@ -156,7 +186,6 @@ class ApiService {
     }
   }
 
-  // APPROVE REPORT
   static Future<bool> approveReport(int reportId) async {
     final response = await http.put(
       Uri.parse("$baseUrl/admin/approve/$reportId"),
@@ -165,7 +194,6 @@ class ApiService {
     return response.statusCode == 200;
   }
 
-  // REJECT REPORT
   static Future<bool> rejectReport(int reportId) async {
     final response = await http.put(
       Uri.parse("$baseUrl/admin/reject/$reportId"),

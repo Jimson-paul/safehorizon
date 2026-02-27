@@ -49,6 +49,61 @@ def get_db():
 
 
 # =====================================================
+# GET USER PROFILE
+# =====================================================
+@app.get("/user/{email}")
+def get_user(email: str, db: Session = Depends(get_db)):
+
+    user = db.query(models.User)\
+        .filter(models.User.email == email)\
+        .first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return {
+        "name": user.name,
+        "email": user.email,
+        "phone": user.phone,
+        "profile_image": user.profile_image
+    }
+
+
+# =====================================================
+# UPLOAD PROFILE IMAGE
+# =====================================================
+@app.post("/upload-profile-image")
+async def upload_profile_image(
+    email: str = Form(...),
+    image: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+
+    user = db.query(models.User)\
+        .filter(models.User.email == email)\
+        .first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    filename = f"{email}_{image.filename}"
+    file_location = os.path.join(UPLOAD_DIR, filename)
+
+    with open(file_location, "wb") as buffer:
+        shutil.copyfileobj(image.file, buffer)
+
+    image_path = file_location.replace("\\", "/")
+
+    user.profile_image = image_path
+    db.commit()
+
+    return {
+        "message": "Profile image saved successfully",
+        "image_url": image_path
+    }
+
+
+# =====================================================
 # REGISTER
 # =====================================================
 @app.post("/register")
@@ -138,61 +193,38 @@ def login(user: schemas.UserLogin, db: Session = Depends(get_db)):
 # =====================================================
 # FORGOT PASSWORD FLOW
 # =====================================================
-
-# STEP 1: REQUEST RESET CODE
 @app.post("/forgot-password")
-async def forgot_password(
-    data: schemas.ForgotPassword,
-    db: Session = Depends(get_db)
-):
+async def forgot_password(data: schemas.ForgotPassword,
+                          db: Session = Depends(get_db)):
 
     user = crud.generate_reset_code(db, data.email)
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    await send_verification_email(
-        user.email,
-        user.verification_code
-    )
+    await send_verification_email(user.email, user.verification_code)
 
     return {"message": "Reset code sent to email"}
 
 
-# STEP 2: VERIFY RESET CODE
 @app.post("/verify-reset-code")
-def verify_reset_code(
-    data: schemas.VerifyResetCode,
-    db: Session = Depends(get_db)
-):
+def verify_reset_code(data: schemas.VerifyResetCode,
+                      db: Session = Depends(get_db)):
 
-    success = crud.verify_reset_code(
-        db,
-        data.email,
-        data.code
-    )
+    success = crud.verify_reset_code(db, data.email, data.code)
 
     if not success:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid or expired code"
-        )
+        raise HTTPException(status_code=400,
+                            detail="Invalid or expired code")
 
     return {"message": "Code verified"}
 
 
-# STEP 3: RESET PASSWORD
 @app.post("/reset-password")
-def reset_password(
-    data: schemas.ResetPassword,
-    db: Session = Depends(get_db)
-):
+def reset_password(data: schemas.ResetPassword,
+                   db: Session = Depends(get_db)):
 
-    success = crud.reset_password(
-        db,
-        data.email,
-        data.password
-    )
+    success = crud.reset_password(db, data.email, data.password)
 
     if not success:
         raise HTTPException(status_code=400, detail="Reset failed")
@@ -224,7 +256,7 @@ def delete_account(email: str, db: Session = Depends(get_db)):
 
 
 # =====================================================
-# ACCIDENT REPORT
+# ACCIDENT REPORT (FIXED)
 # =====================================================
 @app.post("/report-accident")
 async def report_accident(
@@ -238,36 +270,46 @@ async def report_accident(
     db: Session = Depends(get_db)
 ):
 
-    image_path = None
+    print("🚨 REPORT API HIT")
 
-    if image:
-        file_location = os.path.join(UPLOAD_DIR, image.filename)
+    try:
+        image_path = None
 
-        with open(file_location, "wb") as buffer:
-            shutil.copyfileobj(image.file, buffer)
+        if image:
+            filename = f"{user_email}_{image.filename}"
+            file_location = os.path.join(UPLOAD_DIR, filename)
 
-        image_path = file_location.replace("\\", "/")
+            with open(file_location, "wb") as buffer:
+                shutil.copyfileobj(image.file, buffer)
 
-    accident = models.Accident(
-        user_email=user_email,
-        latitude=latitude,
-        longitude=longitude,
-        severity=severity,
-        description=description,
-        image_path=image_path,
-        accident_datetime=accident_datetime,
-        status="pending"
-    )
+            image_path = file_location.replace("\\", "/")
 
-    db.add(accident)
-    db.commit()
-    db.refresh(accident)
+        accident = models.Accident(
+            user_email=user_email,
+            latitude=latitude,
+            longitude=longitude,
+            severity=severity,
+            description=description,
+            image_path=image_path,
+            accident_datetime=accident_datetime,
+            status="pending"
+        )
 
-    return {
-        "message": "Accident report submitted successfully",
-        "report_id": accident.id,
-        "status": accident.status
-    }
+        db.add(accident)
+        db.commit()
+        db.refresh(accident)
+
+        print("✅ REPORT SAVED:", accident.id)
+
+        return {
+            "message": "Accident report submitted successfully",
+            "report_id": accident.id,
+            "status": accident.status
+        }
+
+    except Exception as e:
+        print("❌ REPORT FAILED:", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # =====================================================
@@ -288,7 +330,8 @@ def get_user_reports(email: str, db: Session = Depends(get_db)):
 # ADMIN APIs
 # =====================================================
 @app.get("/admin/pending-reports")
-def get_pending_reports(request: Request, db: Session = Depends(get_db)):
+def get_pending_reports(request: Request,
+                        db: Session = Depends(get_db)):
 
     reports = db.query(models.Accident)\
         .filter(models.Accident.status == "pending")\
@@ -300,7 +343,6 @@ def get_pending_reports(request: Request, db: Session = Depends(get_db)):
 
     for r in reports:
         image_url = None
-
         if r.image_path:
             image_url = f"{base_url}/{r.image_path}"
 

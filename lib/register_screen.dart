@@ -12,9 +12,8 @@ class RegisterScreen extends StatefulWidget {
 class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  // ================= CONTROLLERS =================
   final nameController = TextEditingController();
-  final phoneController = TextEditingController(); // ✅ NEW
+  final phoneController = TextEditingController();
   final emailController = TextEditingController();
   final codeController = TextEditingController();
   final passwordController = TextEditingController();
@@ -26,30 +25,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   void dispose() {
     nameController.dispose();
-    phoneController.dispose(); // ✅ dispose phone
+    phoneController.dispose();
     emailController.dispose();
     codeController.dispose();
     passwordController.dispose();
     super.dispose();
   }
 
-  // =====================================================
-  // STEP 1: GENERATE / RESEND OTP
-  // =====================================================
+  // ================= STEP 1 =================
   Future<void> generateCode() async {
     if (!_formKey.currentState!.validate()) return;
 
     String name = nameController.text.trim();
     String email = emailController.text.trim();
 
-    // ✅ OPTIONAL PHONE
     String? phone = phoneController.text.trim().isEmpty
         ? null
         : phoneController.text.trim();
 
     setState(() => isLoading = true);
 
-    // ✅ SEND NAME + EMAIL + PHONE
     String result = await ApiService.register(name, email, phone);
 
     if (!mounted) return;
@@ -75,9 +70,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
-  // =====================================================
-  // STEP 2: VERIFY OTP
-  // =====================================================
+  // ================= STEP 2 =================
   Future<void> verifyCode() async {
     String email = emailController.text.trim();
     String code = codeController.text.trim();
@@ -105,9 +98,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  // =====================================================
-  // STEP 3: CREATE PASSWORD
-  // =====================================================
+  // ================= STEP 3 =================
   Future<void> createPassword() async {
     String email = emailController.text.trim();
     String password = passwordController.text.trim();
@@ -145,9 +136,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
-  // =====================================================
-  // UI
-  // =====================================================
+  // ================= UI =================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -169,17 +158,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 key: _formKey,
                 child: Column(
                   children: [
-                    /// LOGO
+                    /// ✅ PERFECT CIRCULAR LOGO
                     Container(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: Colors.white.withOpacity(0.5),
                       ),
-                      child: const Icon(
-                        Icons.shield_rounded,
-                        size: 80,
-                        color: Color(0xFF1976D2),
+                      child: const CircleAvatar(
+                        radius: 45,
+                        backgroundColor: Colors.transparent,
+                        backgroundImage: AssetImage('assets/images/logo.png'),
                       ),
                     ),
 
@@ -196,7 +185,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                     const SizedBox(height: 40),
 
-                    /// NAME
                     _inputField(
                       controller: nameController,
                       hint: "Full Name",
@@ -206,7 +194,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                     const SizedBox(height: 20),
 
-                    /// ✅ PHONE (OPTIONAL)
                     _inputField(
                       controller: phoneController,
                       hint: "Phone Number (Optional)",
@@ -216,7 +203,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                     const SizedBox(height: 20),
 
-                    /// EMAIL
                     _inputField(
                       controller: emailController,
                       hint: "Email",
@@ -228,7 +214,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                     if (!codeSent) _mainButton("Generate Code", generateCode),
 
-                    /// OTP
                     if (codeSent && !emailVerified) ...[
                       _inputField(
                         controller: codeController,
@@ -239,7 +224,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       _mainButton("Verify Code", verifyCode),
                     ],
 
-                    /// PASSWORD
                     if (emailVerified) ...[
                       _inputField(
                         controller: passwordController,
@@ -260,9 +244,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  // =====================================================
-  // INPUT FIELD
-  // =====================================================
+  // ================= INPUT =================
   Widget _inputField({
     required TextEditingController controller,
     required String hint,
@@ -289,9 +271,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  // =====================================================
-  // BUTTON
-  // =====================================================
+  // ================= BUTTON =================
   Widget _mainButton(String text, VoidCallback onPressed) {
     return SizedBox(
       width: double.infinity,

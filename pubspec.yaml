@@ -1,5 +1,5 @@
 name: safehorizon
-description: "A new Flutter project."
+description: "Safe Horizon Accident Reporting App"
 publish_to: 'none'
 
 version: 1.0.0+1
@@ -13,19 +13,25 @@ dependencies:
 
   cupertino_icons: ^1.0.8
 
-  # API calls
+  # ================= API =================
   http: ^1.6.0
 
-  # Map (OpenStreetMap)
+  # ================= MAP (OpenStreetMap) =================
   flutter_map: ^8.2.2
   latlong2: ^0.9.1
 
-  # Location + Permissions
+  # ================= LOCATION =================
   geolocator: ^11.0.0
   permission_handler: ^11.3.1
 
-  # ✅ Image upload (camera/gallery)
+  # ================= CAMERA / IMAGE =================
   image_picker: ^1.1.2
+
+  # ================= DATE FORMAT =================
+  intl: ^0.19.0
+
+  # ================= LOCAL STORAGE (AUTO LOGIN) =================
+  shared_preferences: ^2.2.3
 
 dev_dependencies:
   flutter_test:
@@ -34,3 +40,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/images/logo.png
