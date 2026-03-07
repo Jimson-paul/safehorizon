@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:geolocator/geolocator.dart';
+import 'services/marker_animation_service.dart';
 
 import 'profile_screen.dart';
 import 'report_accident_screen.dart';
+import 'services/location_tracking_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   final String userName;
@@ -25,38 +26,47 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   LatLng? currentLocation;
 
-  // ================= GET GPS =================
-  Future<void> getUserLocation() async {
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-
-    if (!serviceEnabled) {
-      await Geolocator.openLocationSettings();
-      return;
-    }
-
-    LocationPermission permission = await Geolocator.checkPermission();
-
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
-
-    if (permission == LocationPermission.deniedForever) {
-      return;
-    }
-
-    Position position = await Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.high,
-    );
-
-    setState(() {
-      currentLocation = LatLng(position.latitude, position.longitude);
-    });
-  }
+  final MapController mapController = MapController();
+  final LocationTrackingService locationService = LocationTrackingService();
 
   @override
   void initState() {
     super.initState();
-    getUserLocation();
+
+    locationService.startTracking((location) {
+      if (!mounted) return;
+
+      // First GPS fix
+      if (currentLocation == null) {
+        setState(() {
+          currentLocation = location;
+        });
+
+        mapController.move(location, 16);
+        return;
+      }
+
+      // Smooth animation between GPS points
+      MarkerAnimationService.animate(
+        start: currentLocation!,
+        end: location,
+        onUpdate: (pos) {
+          if (!mounted) return;
+
+          setState(() {
+            currentLocation = pos;
+          });
+
+          mapController.move(pos, mapController.camera.zoom);
+        },
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    locationService.stopTracking();
+    super.dispose();
   }
 
   @override
@@ -74,8 +84,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               child: Stack(
                 children: [
-                  /// ================= MAP =================
+                  /// MAP
                   FlutterMap(
+                    mapController: mapController,
                     options: MapOptions(
                       initialCenter: currentLocation!,
                       initialZoom: 16,
@@ -105,7 +116,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ],
                   ),
 
-                  /// ================= SEARCH BAR =================
+                  /// SEARCH BAR
                   Positioned(
                     top: 60,
                     left: 20,
@@ -133,7 +144,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
 
-                  /// ================= BOTTOM NAV =================
+                  /// BOTTOM NAV
                   Positioned(
                     bottom: 25,
                     left: 25,
@@ -158,6 +169,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ],
                           ),
 
+                          /// REPORT
                           GestureDetector(
                             onTap: () {
                               Navigator.push(
@@ -181,6 +193,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                           ),
 
+                          /// PROFILE
                           GestureDetector(
                             onTap: () {
                               Navigator.push(
