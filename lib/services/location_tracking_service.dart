@@ -33,7 +33,7 @@ class LocationTrackingService {
     // Faster GPS update settings
     const LocationSettings locationSettings = LocationSettings(
       accuracy: LocationAccuracy.best, // highest accuracy
-      distanceFilter: 1, // update every 1 meter
+      distanceFilter: 0, // update immediately without waiting for 1m movement
     );
 
     // Start GPS stream

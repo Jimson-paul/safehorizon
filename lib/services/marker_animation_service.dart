@@ -8,12 +8,15 @@ class MarkerAnimationService {
     required LatLng start,
     required LatLng end,
     required Function(LatLng) onUpdate,
-    Duration duration = const Duration(milliseconds: 300),
+
+    // Smooth longer animation
+    Duration duration = const Duration(milliseconds: 1500),
   }) {
-    // stop previous animation
+    // Stop previous animation
     _timer?.cancel();
 
-    const int steps = 15;
+    // More steps = smoother movement
+    const int steps = 40;
     int step = 0;
 
     final interval = duration ~/ steps;
@@ -31,8 +34,10 @@ class MarkerAnimationService {
 
       onUpdate(LatLng(lat, lng));
 
+      // Ensure we end exactly at destination
       if (step >= steps) {
         timer.cancel();
+        onUpdate(end);
       }
     });
   }
