@@ -1,20 +1,20 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!-- ================= INTERNET ================= -->
-    <!-- Required for API calls + OpenStreetMap tiles -->
+    <!-- Required for API calls + map loading -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
     <!-- ================= LOCATION PERMISSIONS ================= -->
     <!-- GPS precise location -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
 
-    <!-- Network-based location (fallback) -->
+    <!-- Network-based location -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
 
-    <!-- Recommended for Android 12+ location accuracy -->
+    <!-- Recommended for Android 12+ -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
 
-    <!-- Declare GPS hardware (not mandatory but improves compatibility) -->
+    <!-- GPS hardware declaration -->
     <uses-feature
         android:name="android.hardware.location.gps"
         android:required="false" />
@@ -23,6 +23,11 @@
         android:label="safehorizon"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+
+        <!-- GOOGLE MAPS API KEY -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyDTze0cTKBxDCPbi0BzsHDXp-Bce2cLgNs"/>
 
         <activity
             android:name=".MainActivity"

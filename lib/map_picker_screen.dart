@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 
 class MapPickerScreen extends StatefulWidget {
@@ -14,9 +13,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
   LatLng? selectedLocation;
   LatLng? currentLocation;
 
-  final MapController mapController = MapController();
-
-  bool mapReady = false;
+  GoogleMapController? mapController;
 
   // ================= GET GPS LOCATION =================
   Future<void> getUserLocation() async {
@@ -64,66 +61,46 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
         backgroundColor: Colors.blue,
       ),
 
-      // ✅ WAIT UNTIL GPS LOADS
+      // WAIT UNTIL GPS LOADS
       body: currentLocation == null
           ? const Center(child: CircularProgressIndicator())
-          : FlutterMap(
-              mapController: mapController,
-              options: MapOptions(
-                // ✅ START DIRECTLY AT GPS LOCATION
-                initialCenter: currentLocation!,
-                initialZoom: 17,
-
-                onMapReady: () {
-                  mapReady = true;
-                },
-
-                onTap: (tapPosition, point) {
-                  setState(() {
-                    selectedLocation = point;
-                  });
-                },
+          : GoogleMap(
+              initialCameraPosition: CameraPosition(
+                target: currentLocation!,
+                zoom: 17,
               ),
-              children: [
-                /// MAP TILES
-                TileLayer(
-                  urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-                  userAgentPackageName: "com.example.safehorizon",
-                ),
 
-                /// CURRENT GPS MARKER
-                MarkerLayer(
-                  markers: [
-                    Marker(
-                      point: currentLocation!,
-                      width: 50,
-                      height: 50,
-                      child: const Icon(
-                        Icons.my_location,
-                        color: Colors.blue,
-                        size: 42,
-                      ),
-                    ),
-                  ],
-                ),
+              onMapCreated: (controller) {
+                mapController = controller;
+              },
 
-                /// SELECTED LOCATION MARKER
-                if (selectedLocation != null)
-                  MarkerLayer(
-                    markers: [
-                      Marker(
-                        point: selectedLocation!,
-                        width: 50,
-                        height: 50,
-                        child: const Icon(
-                          Icons.location_pin,
-                          color: Colors.red,
-                          size: 45,
-                        ),
-                      ),
-                    ],
+              // TAP TO SELECT LOCATION
+              onTap: (LatLng point) {
+                setState(() {
+                  selectedLocation = point;
+                });
+              },
+
+              markers: {
+                // CURRENT LOCATION MARKER
+                Marker(
+                  markerId: const MarkerId("current_location"),
+                  position: currentLocation!,
+                  icon: BitmapDescriptor.defaultMarkerWithHue(
+                    BitmapDescriptor.hueBlue,
                   ),
-              ],
+                ),
+
+                // SELECTED LOCATION MARKER
+                if (selectedLocation != null)
+                  Marker(
+                    markerId: const MarkerId("selected_location"),
+                    position: selectedLocation!,
+                    icon: BitmapDescriptor.defaultMarkerWithHue(
+                      BitmapDescriptor.hueRed,
+                    ),
+                  ),
+              },
             ),
 
       floatingActionButton: FloatingActionButton(

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 class RoutePreviewScreen extends StatefulWidget {
   final LatLng currentLocation;
@@ -21,7 +20,7 @@ class RoutePreviewScreen extends StatefulWidget {
 }
 
 class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
-  final MapController mapController = MapController();
+  GoogleMapController? mapController;
 
   String formatDuration(double seconds) {
     final hours = (seconds ~/ 3600);
@@ -41,7 +40,7 @@ class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
   }
 
   void fitRoute() {
-    if (widget.routePoints.isEmpty) return;
+    if (widget.routePoints.isEmpty || mapController == null) return;
 
     double minLat = widget.routePoints.first.latitude;
     double maxLat = widget.routePoints.first.latitude;
@@ -55,11 +54,12 @@ class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
       if (p.longitude > maxLng) maxLng = p.longitude;
     }
 
-    final bounds = LatLngBounds(LatLng(minLat, minLng), LatLng(maxLat, maxLng));
-
-    mapController.fitCamera(
-      CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(50)),
+    LatLngBounds bounds = LatLngBounds(
+      southwest: LatLng(minLat, minLng),
+      northeast: LatLng(maxLat, maxLng),
     );
+
+    mapController!.animateCamera(CameraUpdate.newLatLngBounds(bounds, 50));
   }
 
   @override
@@ -67,59 +67,41 @@ class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
     return Scaffold(
       body: Stack(
         children: [
-          FlutterMap(
-            mapController: mapController,
-            options: MapOptions(
-              initialCenter: widget.currentLocation,
-              initialZoom: 13,
+          GoogleMap(
+            initialCameraPosition: CameraPosition(
+              target: widget.currentLocation,
+              zoom: 13,
             ),
-            children: [
-              /// MAP TILE LAYER
-              TileLayer(
-                urlTemplate:
-                    "https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png",
-                userAgentPackageName: "com.example.safehorizon",
-                minZoom: 2,
-                maxZoom: 19,
-              ),
+            onMapCreated: (controller) {
+              mapController = controller;
+              fitRoute();
+            },
 
-              /// ROUTE LINE
-              PolylineLayer(
-                polylines: [
-                  Polyline(
-                    points: widget.routePoints,
-                    strokeWidth: 5,
-                    color: Colors.blue,
-                  ),
-                ],
+            polylines: {
+              Polyline(
+                polylineId: const PolylineId("route"),
+                points: widget.routePoints,
+                color: Colors.blue,
+                width: 5,
               ),
+            },
 
-              /// LOCATION MARKERS
-              MarkerLayer(
-                markers: [
-                  Marker(
-                    point: widget.currentLocation,
-                    width: 50,
-                    height: 50,
-                    child: const Icon(
-                      Icons.my_location,
-                      color: Colors.blue,
-                      size: 45,
-                    ),
-                  ),
-                  Marker(
-                    point: widget.destination,
-                    width: 50,
-                    height: 50,
-                    child: const Icon(
-                      Icons.location_pin,
-                      color: Colors.red,
-                      size: 50,
-                    ),
-                  ),
-                ],
+            markers: {
+              Marker(
+                markerId: const MarkerId("current_location"),
+                position: widget.currentLocation,
+                icon: BitmapDescriptor.defaultMarkerWithHue(
+                  BitmapDescriptor.hueBlue,
+                ),
               ),
-            ],
+              Marker(
+                markerId: const MarkerId("destination"),
+                position: widget.destination,
+                icon: BitmapDescriptor.defaultMarkerWithHue(
+                  BitmapDescriptor.hueRed,
+                ),
+              ),
+            },
           ),
 
           /// Bottom route panel

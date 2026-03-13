@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:latlong2/latlong.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 class MarkerAnimationService {
   static Timer? _timer;
@@ -8,23 +8,27 @@ class MarkerAnimationService {
     required LatLng start,
     required LatLng end,
     required Function(LatLng) onUpdate,
-
-    // Smooth longer animation
-    Duration duration = const Duration(milliseconds: 1500),
+    Duration duration = const Duration(milliseconds: 800),
   }) {
-    // Stop previous animation
+    // Stop any running animation
     _timer?.cancel();
+    _timer = null;
 
-    // More steps = smoother movement
-    const int steps = 40;
+    const int steps = 25;
     int step = 0;
 
-    final interval = duration ~/ steps;
+    // Ensure interval is never zero
+    final int interval = (duration.inMilliseconds ~/ steps).clamp(
+      1,
+      duration.inMilliseconds,
+    );
 
-    _timer = Timer.periodic(interval, (timer) {
+    _timer = Timer.periodic(Duration(milliseconds: interval), (timer) {
       step++;
 
-      final double progress = step / steps;
+      double progress = step / steps;
+
+      if (progress > 1) progress = 1;
 
       final double lat =
           start.latitude + (end.latitude - start.latitude) * progress;
@@ -34,11 +38,15 @@ class MarkerAnimationService {
 
       onUpdate(LatLng(lat, lng));
 
-      // Ensure we end exactly at destination
       if (step >= steps) {
         timer.cancel();
-        onUpdate(end);
+        _timer = null;
       }
     });
+  }
+
+  static void stop() {
+    _timer?.cancel();
+    _timer = null;
   }
 }

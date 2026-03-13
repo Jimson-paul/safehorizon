@@ -13,12 +13,11 @@ dependencies:
 
   cupertino_icons: ^1.0.8
 
-  # ================= API =================
+  # ================= NETWORK / API =================
   http: ^1.6.0
 
-  # ================= MAP (OpenStreetMap) =================
-  flutter_map: ^8.2.2
-  latlong2: ^0.9.1
+  # ================= MAP =================
+  google_maps_flutter: ^2.15.0
 
   # ================= LOCATION =================
   geolocator: ^11.0.0
@@ -30,7 +29,7 @@ dependencies:
   # ================= DATE FORMAT =================
   intl: ^0.19.0
 
-  # ================= LOCAL STORAGE (AUTO LOGIN) =================
+  # ================= LOCAL STORAGE =================
   shared_preferences: ^2.2.3
 
 dev_dependencies:

@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:geolocator/geolocator.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 class LocationTrackingService {
   StreamSubscription<Position>? _positionStream;
@@ -30,10 +30,10 @@ class LocationTrackingService {
       return;
     }
 
-    // Faster GPS update settings
+    // GPS update settings (FILTERED)
     const LocationSettings locationSettings = LocationSettings(
-      accuracy: LocationAccuracy.best, // highest accuracy
-      distanceFilter: 0, // update immediately without waiting for 1m movement
+      accuracy: LocationAccuracy.best,
+      distanceFilter: 5, // only update every 5 meters
     );
 
     // Start GPS stream
