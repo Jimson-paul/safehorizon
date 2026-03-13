@@ -1,52 +1,60 @@
-import 'dart:async';
+import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 class MarkerAnimationService {
-  static Timer? _timer;
+  static AnimationController? _controller;
+  static Animation<LatLng>? _animation;
 
+  /// Smoothly animates a marker from [start] to [end] over [duration].
   static void animate({
+    required TickerProvider vsync,
     required LatLng start,
     required LatLng end,
     required Function(LatLng) onUpdate,
     Duration duration = const Duration(milliseconds: 800),
   }) {
-    // Stop any running animation
-    _timer?.cancel();
-    _timer = null;
+    // 1. Stop and dispose of any existing animation
+    stop();
 
-    const int steps = 25;
-    int step = 0;
+    // 2. Create a new controller tied to the screen's refresh rate
+    _controller = AnimationController(vsync: vsync, duration: duration);
 
-    // Ensure interval is never zero
-    final int interval = (duration.inMilliseconds ~/ steps).clamp(
-      1,
-      duration.inMilliseconds,
-    );
+    // 3. Create a Tween that interpolates between the start and end LatLng
+    _animation = LatLngTween(
+      begin: start,
+      end: end,
+    ).animate(CurvedAnimation(parent: _controller!, curve: Curves.easeOut));
 
-    _timer = Timer.periodic(Duration(milliseconds: interval), (timer) {
-      step++;
-
-      double progress = step / steps;
-
-      if (progress > 1) progress = 1;
-
-      final double lat =
-          start.latitude + (end.latitude - start.latitude) * progress;
-
-      final double lng =
-          start.longitude + (end.longitude - start.longitude) * progress;
-
-      onUpdate(LatLng(lat, lng));
-
-      if (step >= steps) {
-        timer.cancel();
-        _timer = null;
+    // 4. Listen to every frame of the animation
+    _controller!.addListener(() {
+      if (_animation?.value != null) {
+        onUpdate(_animation!.value);
       }
     });
+
+    // 5. Start the animation
+    _controller!.forward();
   }
 
   static void stop() {
-    _timer?.cancel();
-    _timer = null;
+    if (_controller != null) {
+      _controller!.stop();
+      _controller!.dispose();
+      _controller = null;
+    }
+  }
+}
+
+/// A custom Tween that knows how to interpolate between two LatLng objects
+class LatLngTween extends Tween<LatLng> {
+  LatLngTween({required LatLng begin, required LatLng end})
+    : super(begin: begin, end: end);
+
+  @override
+  LatLng lerp(double t) {
+    final double lat = begin!.latitude + (end!.latitude - begin!.latitude) * t;
+    final double lng =
+        begin!.longitude + (end!.longitude - begin!.longitude) * t;
+    return LatLng(lat, lng);
   }
 }

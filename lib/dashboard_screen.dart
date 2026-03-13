@@ -1,6 +1,9 @@
 import 'dart:math';
+import 'dart:ui' as ui;
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:geolocator/geolocator.dart';
 
 import 'services/map_matching_service.dart';
 import 'profile_screen.dart';
@@ -24,135 +27,130 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends State<DashboardScreen>
+    with TickerProviderStateMixin {
+  // ==========================================
+  // UI & NAVIGATION STATE
+  // ==========================================
+  int _selectedTabIndex = 0;
+  bool _isTrackingCamera = true; // 🟢 NEW: Controls if camera follows the dot
+
+  // ==========================================
+  // MAP & TRACKING STATE
+  // ==========================================
   LatLng? currentLocation;
-  LatLng? previousLocation;
-
   GoogleMapController? mapController;
-
   final LocationTrackingService locationService = LocationTrackingService();
 
-  final List<LatLng> gpsBuffer = [];
-
-  LatLng? lastGpsLocation;
-  DateTime? lastGpsTime;
-
-  /// Smooth GPS using moving average
-  LatLng smoothLocation(LatLng newPoint) {
-    gpsBuffer.add(newPoint);
-
-    if (gpsBuffer.length > 5) {
-      gpsBuffer.removeAt(0);
-    }
-
-    double lat = 0;
-    double lng = 0;
-
-    for (var p in gpsBuffer) {
-      lat += p.latitude;
-      lng += p.longitude;
-    }
-
-    return LatLng(lat / gpsBuffer.length, lng / gpsBuffer.length);
-  }
-
-  /// Distance calculation
-  double distance(LatLng a, LatLng b) {
-    const double R = 6371000;
-
-    double dLat = (b.latitude - a.latitude) * (pi / 180);
-    double dLng = (b.longitude - a.longitude) * (pi / 180);
-
-    double lat1 = a.latitude * (pi / 180);
-    double lat2 = b.latitude * (pi / 180);
-
-    double x = dLng * ((lat1 + lat2) / 2);
-    double y = dLat;
-
-    return R * sqrt(x * x + y * y);
-  }
-
-  /// Dead reckoning prediction
-  LatLng predictLocation(LatLng previous, LatLng current, double seconds) {
-    double latSpeed = (current.latitude - previous.latitude) / seconds;
-    double lngSpeed = (current.longitude - previous.longitude) / seconds;
-
-    double predictedLat = current.latitude + latSpeed * seconds;
-    double predictedLng = current.longitude + lngSpeed * seconds;
-
-    return LatLng(predictedLat, predictedLng);
-  }
+  DateTime? _lastApiCallTime;
+  BitmapDescriptor? _roundedMarker;
 
   @override
   void initState() {
     super.initState();
 
-    locationService.startTracking((location) async {
+    _createRoundedMarker();
+
+    locationService.startTracking((location) {
       if (!mounted) return;
 
       final rawLocation = LatLng(location.latitude, location.longitude);
-
-      /// Snap GPS to road
-      final snappedLocation = await MapMatchingService.snapToRoad(rawLocation);
-
-      final gpsPoint = snappedLocation ?? rawLocation;
-
-      /// Smooth GPS
-      final filteredLocation = smoothLocation(gpsPoint);
-
       final now = DateTime.now();
 
-      /// First GPS fix
-      if (currentLocation == null || previousLocation == null) {
-        setState(() {
-          currentLocation = filteredLocation;
-        });
+      // 1. Instantly move the marker visually
+      _animateMarkerTo(rawLocation);
 
-        previousLocation = filteredLocation;
-        lastGpsLocation = filteredLocation;
-        lastGpsTime = now;
-        return;
+      // 2. Fetch road-snap data in the background (throttled 4s)
+      if (_lastApiCallTime == null ||
+          now.difference(_lastApiCallTime!).inSeconds >= 4) {
+        _lastApiCallTime = now;
+        _fetchSnappedLocationInBackground(rawLocation);
       }
-
-      /// Ignore tiny movement (<2 meters)
-      double dist = distance(previousLocation!, filteredLocation);
-      if (dist < 2) return;
-
-      LatLng targetLocation = filteredLocation;
-
-      /// Dead reckoning prediction
-      if (lastGpsLocation != null && lastGpsTime != null) {
-        double seconds = now.difference(lastGpsTime!).inMilliseconds / 1000.0;
-
-        if (seconds > 0.2) {
-          targetLocation = predictLocation(
-            lastGpsLocation!,
-            filteredLocation,
-            seconds,
-          );
-        }
-      }
-
-      /// Smooth marker animation
-      MarkerAnimationService.animate(
-        start: previousLocation!,
-        end: targetLocation,
-        onUpdate: (value) {
-          if (!mounted) return;
-
-          setState(() {
-            currentLocation = value;
-          });
-        },
-      );
-
-      /// STEP 4 — update previous location
-      previousLocation = targetLocation;
-
-      /// Update prediction state
-      lastGpsLocation = filteredLocation;
-      lastGpsTime = now;
     });
+  }
+
+  // ==========================================
+  // HELPER: ANIMATE MARKER & CAMERA
+  // ==========================================
+  void _animateMarkerTo(LatLng targetLocation) {
+    if (currentLocation == null) {
+      setState(() => currentLocation = targetLocation);
+      // Snap camera on the very first load
+      mapController?.animateCamera(
+        CameraUpdate.newLatLngZoom(
+          targetLocation,
+          17.5,
+        ), // 🟢 Zoom increased to 17.5
+      );
+      return;
+    }
+
+    // Auto-move the camera ONLY if the user hasn't dragged the map
+    if (_isTrackingCamera) {
+      mapController?.animateCamera(CameraUpdate.newLatLng(targetLocation));
+    }
+
+    MarkerAnimationService.animate(
+      vsync: this,
+      start:
+          currentLocation!, // ALWAYS start exactly where the dot currently is!
+      end: targetLocation,
+      onUpdate: (value) {
+        if (!mounted) return;
+        setState(() {
+          currentLocation = value;
+        });
+      },
+    );
+  }
+
+  // ==========================================
+  // CUSTOM MARKER GENERATOR
+  // ==========================================
+  Future<void> _createRoundedMarker() async {
+    const int size = 100;
+    final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
+    final Canvas canvas = Canvas(pictureRecorder);
+
+    final Paint glowPaint = Paint()..color = Colors.blue.withOpacity(0.3);
+    canvas.drawCircle(const Offset(size / 2, size / 2), size / 2.0, glowPaint);
+
+    final Paint whiteBorder = Paint()..color = Colors.white;
+    canvas.drawCircle(
+      const Offset(size / 2, size / 2),
+      size / 3.0,
+      whiteBorder,
+    );
+
+    final Paint innerCore = Paint()..color = Colors.blue;
+    canvas.drawCircle(const Offset(size / 2, size / 2), size / 4.0, innerCore);
+
+    final ui.Image image = await pictureRecorder.endRecording().toImage(
+      size,
+      size,
+    );
+    final ByteData? byteData = await image.toByteData(
+      format: ui.ImageByteFormat.png,
+    );
+
+    if (mounted) {
+      setState(() {
+        _roundedMarker = BitmapDescriptor.fromBytes(
+          byteData!.buffer.asUint8List(),
+        );
+      });
+    }
+  }
+
+  Future<void> _fetchSnappedLocationInBackground(LatLng rawLoc) async {
+    try {
+      final snapped = await MapMatchingService.snapToRoad(rawLoc);
+      if (snapped != null && mounted) {
+        _animateMarkerTo(snapped);
+      }
+    } catch (e) {
+      debugPrint("Map matching failed: $e");
+    }
   }
 
   @override
@@ -162,19 +160,45 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: currentLocation == null
-          ? const Center(child: CircularProgressIndicator())
-          : Stack(
-              children: [
-                GoogleMap(
+  void _onBottomNavTapped(int index) {
+    if (index == 1) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ReportAccidentScreen(userEmail: widget.userEmail),
+        ),
+      );
+    } else if (index == 0) {
+      setState(() => _selectedTabIndex = 0);
+    } else if (index == 2) {
+      setState(() => _selectedTabIndex = 1);
+    }
+  }
+
+  int get _currentNavIndex {
+    if (_selectedTabIndex == 0) return 0;
+    return 2;
+  }
+
+  // ==========================================
+  // WIDGET: MAP VIEW
+  // ==========================================
+  Widget _buildMapTab() {
+    return currentLocation == null || _roundedMarker == null
+        ? const Center(child: CircularProgressIndicator())
+        : Stack(
+            children: [
+              // Listener detects if user touches the map to disable auto-tracking
+              Listener(
+                onPointerDown: (_) {
+                  setState(() => _isTrackingCamera = false);
+                },
+                child: GoogleMap(
                   initialCameraPosition: CameraPosition(
                     target: currentLocation!,
-                    zoom: 16,
+                    zoom: 17.5, // 🟢 Zoom increased to 17.5
                   ),
-                  myLocationEnabled: true,
+                  myLocationEnabled: false,
                   myLocationButtonEnabled: false,
                   zoomControlsEnabled: false,
                   onMapCreated: (controller) {
@@ -184,52 +208,139 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Marker(
                       markerId: const MarkerId("current_location"),
                       position: currentLocation!,
-                      icon: BitmapDescriptor.defaultMarkerWithHue(
-                        BitmapDescriptor.hueBlue,
-                      ),
+                      icon: _roundedMarker!,
+                      anchor: const Offset(0.5, 0.5),
                     ),
                   },
                 ),
+              ),
 
-                /// Map controls
-                Positioned(
-                  left: 15,
-                  top: MediaQuery.of(context).size.height * 0.35,
-                  child: Column(
-                    children: [
-                      FloatingActionButton(
-                        heroTag: "zoomIn",
-                        mini: true,
-                        child: const Icon(Icons.add),
-                        onPressed: () {
-                          mapController?.animateCamera(CameraUpdate.zoomIn());
-                        },
-                      ),
-                      const SizedBox(height: 10),
-                      FloatingActionButton(
-                        heroTag: "zoomOut",
-                        mini: true,
-                        child: const Icon(Icons.remove),
-                        onPressed: () {
-                          mapController?.animateCamera(CameraUpdate.zoomOut());
-                        },
-                      ),
-                      const SizedBox(height: 15),
-                      FloatingActionButton(
-                        heroTag: "myLocation",
-                        mini: true,
-                        child: const Icon(Icons.my_location),
-                        onPressed: () {
-                          mapController?.animateCamera(
-                            CameraUpdate.newLatLng(currentLocation!),
-                          );
-                        },
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 20,
+                left: 20,
+                right: 20,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(30),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Colors.black12,
+                        blurRadius: 10,
+                        offset: Offset(0, 4),
                       ),
                     ],
                   ),
+                  child: TextField(
+                    decoration: InputDecoration(
+                      hintText: "Search Destination...",
+                      hintStyle: TextStyle(color: Colors.grey.shade400),
+                      prefixIcon: const Icon(Icons.search, color: Colors.blue),
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 15),
+                    ),
+                  ),
                 ),
-              ],
-            ),
+              ),
+
+              Positioned(
+                right: 15,
+                bottom: 30,
+                child: Column(
+                  children: [
+                    FloatingActionButton(
+                      heroTag: "zoomIn",
+                      mini: true,
+                      backgroundColor: Colors.white,
+                      child: const Icon(Icons.add, color: Colors.black87),
+                      onPressed: () {
+                        mapController?.animateCamera(CameraUpdate.zoomIn());
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    FloatingActionButton(
+                      heroTag: "zoomOut",
+                      mini: true,
+                      backgroundColor: Colors.white,
+                      child: const Icon(Icons.remove, color: Colors.black87),
+                      onPressed: () {
+                        mapController?.animateCamera(CameraUpdate.zoomOut());
+                      },
+                    ),
+                    const SizedBox(height: 15),
+                    FloatingActionButton(
+                      heroTag: "myLocation",
+                      backgroundColor: _isTrackingCamera
+                          ? Colors.blue
+                          : Colors.white,
+                      child: Icon(
+                        Icons.my_location,
+                        color: _isTrackingCamera ? Colors.white : Colors.blue,
+                      ),
+                      onPressed: () async {
+                        setState(() => _isTrackingCamera = true);
+
+                        if (currentLocation != null) {
+                          mapController?.animateCamera(
+                            CameraUpdate.newLatLngZoom(
+                              currentLocation!,
+                              17.5,
+                            ), // 🟢 Zoom increased to 17.5
+                          );
+                        }
+
+                        try {
+                          Position pos = await Geolocator.getCurrentPosition(
+                            desiredAccuracy: LocationAccuracy.high,
+                          );
+                          LatLng freshLoc = LatLng(pos.latitude, pos.longitude);
+
+                          _animateMarkerTo(freshLoc);
+                        } catch (e) {
+                          debugPrint("Manual GPS fetch failed: $e");
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: IndexedStack(
+        index: _selectedTabIndex,
+        children: [
+          _buildMapTab(),
+          ProfileScreen(
+            name: widget.userName,
+            email: widget.userEmail,
+            phone: widget.userPhone,
+          ),
+        ],
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentNavIndex,
+        onTap: _onBottomNavTapped,
+        selectedItemColor: Colors.blue,
+        unselectedItemColor: Colors.grey,
+        showUnselectedLabels: true,
+        type: BottomNavigationBarType.fixed,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: "Home"),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.add_circle_outline, size: 28),
+            label: "Report",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person_outline),
+            label: "Profile",
+          ),
+        ],
+      ),
     );
   }
 }
