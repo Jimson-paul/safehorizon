@@ -4,12 +4,13 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
-
+import 'route_preview_screen.dart';
 import 'services/map_matching_service.dart';
 import 'profile_screen.dart';
 import 'report_accident_screen.dart';
 import 'services/location_tracking_service.dart';
 import 'services/marker_animation_service.dart';
+import 'services/osrm_service.dart'; // 🟢 Added import for OSRM Service
 
 class DashboardScreen extends StatefulWidget {
   final String userName;
@@ -33,7 +34,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   // UI & NAVIGATION STATE
   // ==========================================
   int _selectedTabIndex = 0;
-  bool _isTrackingCamera = true; // 🟢 NEW: Controls if camera follows the dot
+  bool _isTrackingCamera = true;
 
   // ==========================================
   // MAP & TRACKING STATE
@@ -77,10 +78,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       setState(() => currentLocation = targetLocation);
       // Snap camera on the very first load
       mapController?.animateCamera(
-        CameraUpdate.newLatLngZoom(
-          targetLocation,
-          17.5,
-        ), // 🟢 Zoom increased to 17.5
+        CameraUpdate.newLatLngZoom(targetLocation, 17.5),
       );
       return;
     }
@@ -92,8 +90,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 
     MarkerAnimationService.animate(
       vsync: this,
-      start:
-          currentLocation!, // ALWAYS start exactly where the dot currently is!
+      start: currentLocation!,
       end: targetLocation,
       onUpdate: (value) {
         if (!mounted) return;
@@ -188,7 +185,6 @@ class _DashboardScreenState extends State<DashboardScreen>
         ? const Center(child: CircularProgressIndicator())
         : Stack(
             children: [
-              // Listener detects if user touches the map to disable auto-tracking
               Listener(
                 onPointerDown: (_) {
                   setState(() => _isTrackingCamera = false);
@@ -196,7 +192,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 child: GoogleMap(
                   initialCameraPosition: CameraPosition(
                     target: currentLocation!,
-                    zoom: 17.5, // 🟢 Zoom increased to 17.5
+                    zoom: 17.5,
                   ),
                   myLocationEnabled: false,
                   myLocationButtonEnabled: false,
@@ -232,6 +228,44 @@ class _DashboardScreenState extends State<DashboardScreen>
                     ],
                   ),
                   child: TextField(
+                    // 🟢 CHANGED: Now uses async OSRM Geocoding
+                    onSubmitted: (value) async {
+                      if (currentLocation != null && value.isNotEmpty) {
+                        // 1. Show a quick loading message
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text("Searching for '$value'...")),
+                        );
+
+                        // 2. Fetch the REAL coordinates from Nominatim (OSRM)
+                        LatLng? realDestination =
+                            await OsrmService.getCoordinatesFromText(value);
+
+                        if (!mounted) return;
+
+                        // 3. If found, go to the Preview Screen
+                        if (realDestination != null) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => RoutePreviewScreen(
+                                startLocation: currentLocation!,
+                                destination: realDestination,
+                                destinationName: value.toUpperCase(),
+                              ),
+                            ),
+                          );
+                        } else {
+                          // 4. If not found, tell the user
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                "Could not find that location. Try again! ❌",
+                              ),
+                            ),
+                          );
+                        }
+                      }
+                    },
                     decoration: InputDecoration(
                       hintText: "Search Destination...",
                       hintStyle: TextStyle(color: Colors.grey.shade400),
@@ -282,10 +316,13 @@ class _DashboardScreenState extends State<DashboardScreen>
 
                         if (currentLocation != null) {
                           mapController?.animateCamera(
-                            CameraUpdate.newLatLngZoom(
-                              currentLocation!,
-                              17.5,
-                            ), // 🟢 Zoom increased to 17.5
+                            CameraUpdate.newCameraPosition(
+                              CameraPosition(
+                                target: currentLocation!,
+                                zoom: 19.5,
+                                tilt: 45.0,
+                              ),
+                            ),
                           );
                         }
 

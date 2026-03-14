@@ -1,16 +1,37 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // 🟢 Added
 import 'services/api_service.dart';
 import 'register_screen.dart';
 import 'dashboard_screen.dart';
 import 'admin_screen.dart';
 import 'forgot_password_screen.dart';
 
-void main() {
-  runApp(const SafeHorizonApp());
+// 🟢 Modified main to be async and check login status
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final prefs = await SharedPreferences.getInstance();
+
+  final bool isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
+  final String? savedName = prefs.getString('userName');
+  final String? savedEmail = prefs.getString('userEmail');
+  final String? savedPhone = prefs.getString('userPhone');
+
+  runApp(
+    SafeHorizonApp(
+      initialScreen: isLoggedIn && savedEmail != null
+          ? DashboardScreen(
+              userName: savedName ?? "User",
+              userEmail: savedEmail,
+              userPhone: savedPhone,
+            )
+          : const LoginScreen(),
+    ),
+  );
 }
 
 class SafeHorizonApp extends StatelessWidget {
-  const SafeHorizonApp({super.key});
+  final Widget initialScreen; // 🟢 Added to handle dynamic start
+  const SafeHorizonApp({super.key, required this.initialScreen});
 
   @override
   Widget build(BuildContext context) {
@@ -22,7 +43,7 @@ class SafeHorizonApp extends StatelessWidget {
         fontFamily: 'Roboto',
         colorSchemeSeed: const Color(0xFF1976D2),
       ),
-      home: const LoginScreen(),
+      home: initialScreen, // 🟢 Now starts at either Login or Dashboard
     );
   }
 }
@@ -74,6 +95,13 @@ class _LoginScreenState extends State<LoginScreen> {
       String name = result["name"];
       String userEmail = result["email"];
       String? userPhone = result["phone"];
+
+      // 🟢 NEW: Save session data locally
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('isLoggedIn', true);
+      await prefs.setString('userName', name);
+      await prefs.setString('userEmail', userEmail);
+      await prefs.setString('userPhone', userPhone ?? "");
 
       ScaffoldMessenger.of(
         context,
