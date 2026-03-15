@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:latlong2/latlong.dart'; // 🟢 Swapped to OpenStreetMap coordinates
 
 class MapMatchingService {
   static Future<LatLng?> snapToRoad(LatLng location) async {
@@ -9,14 +9,26 @@ class MapMatchingService {
       "${location.longitude},${location.latitude}",
     );
 
-    final response = await http.get(url);
+    try {
+      final response = await http.get(url);
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
 
-      final snapped = data["waypoints"][0]["location"];
+        if (data["code"] == "Ok" &&
+            data["waypoints"] != null &&
+            data["waypoints"].isNotEmpty) {
+          final snapped = data["waypoints"][0]["location"];
 
-      return LatLng(snapped[1], snapped[0]);
+          // OSRM returns [lon, lat], latlong2 expects (lat, lon)
+          // Adding .toDouble() for safety just in case the API returns an integer
+          return LatLng(snapped[1].toDouble(), snapped[0].toDouble());
+        }
+      }
+    } catch (e) {
+      // It's good practice to catch network errors silently in background services
+      // so it doesn't crash the app if the user loses connection briefly.
+      print("Map matching failed: $e");
     }
 
     return null;

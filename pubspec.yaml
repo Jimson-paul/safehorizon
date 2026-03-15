@@ -16,12 +16,17 @@ dependencies:
   # ================= NETWORK / API =================
   http: ^1.6.0
 
-  # ================= MAP =================
-  google_maps_flutter: ^2.15.0
+  # ================= OPENSTREETMAP (OSM) =================
+  # Replacing google_maps_flutter with flutter_map for zero-cost routing
+  flutter_map: ^8.2.0  
+  latlong2: ^0.9.1   # 🟢 Downgraded to 0.9.1 to fix version conflict
 
   # ================= LOCATION =================
   geolocator: ^11.0.0
   permission_handler: ^11.3.1
+
+  # ================= VOICE ASSISTANT =================
+  flutter_tts: ^3.8.5 # 🟢 Added for Text-to-Speech Navigation
 
   # ================= CAMERA / IMAGE =================
   image_picker: ^1.1.2

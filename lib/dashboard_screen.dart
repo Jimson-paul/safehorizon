@@ -1,8 +1,6 @@
-import 'dart:math';
-import 'dart:ui' as ui;
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart'; // 🟢 Added flutter_map
+import 'package:latlong2/latlong.dart'; // 🟢 Added latlong2
 import 'package:geolocator/geolocator.dart';
 import 'route_preview_screen.dart';
 import 'services/map_matching_service.dart';
@@ -10,7 +8,7 @@ import 'profile_screen.dart';
 import 'report_accident_screen.dart';
 import 'services/location_tracking_service.dart';
 import 'services/marker_animation_service.dart';
-import 'services/osrm_service.dart'; // 🟢 Added import for OSRM Service
+import 'services/osrm_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   final String userName;
@@ -30,27 +28,17 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen>
     with TickerProviderStateMixin {
-  // ==========================================
-  // UI & NAVIGATION STATE
-  // ==========================================
   int _selectedTabIndex = 0;
   bool _isTrackingCamera = true;
 
-  // ==========================================
-  // MAP & TRACKING STATE
-  // ==========================================
   LatLng? currentLocation;
-  GoogleMapController? mapController;
+  final MapController mapController = MapController(); // 🟢 Updated Controller
   final LocationTrackingService locationService = LocationTrackingService();
-
   DateTime? _lastApiCallTime;
-  BitmapDescriptor? _roundedMarker;
 
   @override
   void initState() {
     super.initState();
-
-    _createRoundedMarker();
 
     locationService.startTracking((location) {
       if (!mounted) return;
@@ -58,10 +46,8 @@ class _DashboardScreenState extends State<DashboardScreen>
       final rawLocation = LatLng(location.latitude, location.longitude);
       final now = DateTime.now();
 
-      // 1. Instantly move the marker visually
       _animateMarkerTo(rawLocation);
 
-      // 2. Fetch road-snap data in the background (throttled 4s)
       if (_lastApiCallTime == null ||
           now.difference(_lastApiCallTime!).inSeconds >= 4) {
         _lastApiCallTime = now;
@@ -70,22 +56,15 @@ class _DashboardScreenState extends State<DashboardScreen>
     });
   }
 
-  // ==========================================
-  // HELPER: ANIMATE MARKER & CAMERA
-  // ==========================================
   void _animateMarkerTo(LatLng targetLocation) {
     if (currentLocation == null) {
       setState(() => currentLocation = targetLocation);
-      // Snap camera on the very first load
-      mapController?.animateCamera(
-        CameraUpdate.newLatLngZoom(targetLocation, 17.5),
-      );
       return;
     }
 
-    // Auto-move the camera ONLY if the user hasn't dragged the map
     if (_isTrackingCamera) {
-      mapController?.animateCamera(CameraUpdate.newLatLng(targetLocation));
+      // 🟢 Moves the flutter_map camera
+      mapController.move(targetLocation, mapController.camera.zoom);
     }
 
     MarkerAnimationService.animate(
@@ -99,44 +78,6 @@ class _DashboardScreenState extends State<DashboardScreen>
         });
       },
     );
-  }
-
-  // ==========================================
-  // CUSTOM MARKER GENERATOR
-  // ==========================================
-  Future<void> _createRoundedMarker() async {
-    const int size = 100;
-    final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
-    final Canvas canvas = Canvas(pictureRecorder);
-
-    final Paint glowPaint = Paint()..color = Colors.blue.withOpacity(0.3);
-    canvas.drawCircle(const Offset(size / 2, size / 2), size / 2.0, glowPaint);
-
-    final Paint whiteBorder = Paint()..color = Colors.white;
-    canvas.drawCircle(
-      const Offset(size / 2, size / 2),
-      size / 3.0,
-      whiteBorder,
-    );
-
-    final Paint innerCore = Paint()..color = Colors.blue;
-    canvas.drawCircle(const Offset(size / 2, size / 2), size / 4.0, innerCore);
-
-    final ui.Image image = await pictureRecorder.endRecording().toImage(
-      size,
-      size,
-    );
-    final ByteData? byteData = await image.toByteData(
-      format: ui.ImageByteFormat.png,
-    );
-
-    if (mounted) {
-      setState(() {
-        _roundedMarker = BitmapDescriptor.fromBytes(
-          byteData!.buffer.asUint8List(),
-        );
-      });
-    }
   }
 
   Future<void> _fetchSnappedLocationInBackground(LatLng rawLoc) async {
@@ -177,38 +118,62 @@ class _DashboardScreenState extends State<DashboardScreen>
     return 2;
   }
 
-  // ==========================================
-  // WIDGET: MAP VIEW
-  // ==========================================
+  // 🟢 NEW: Clean Flutter widget for your custom marker!
+  Widget _buildGlowingMarker() {
+    return Container(
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: Colors.blue.withOpacity(0.3),
+      ),
+      padding: const EdgeInsets.all(8),
+      child: Container(
+        decoration: const BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.white,
+        ),
+        padding: const EdgeInsets.all(3),
+        child: Container(
+          decoration: const BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.blue,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildMapTab() {
-    return currentLocation == null || _roundedMarker == null
+    return currentLocation == null
         ? const Center(child: CircularProgressIndicator())
         : Stack(
             children: [
-              Listener(
-                onPointerDown: (_) {
-                  setState(() => _isTrackingCamera = false);
-                },
-                child: GoogleMap(
-                  initialCameraPosition: CameraPosition(
-                    target: currentLocation!,
-                    zoom: 17.5,
-                  ),
-                  myLocationEnabled: false,
-                  myLocationButtonEnabled: false,
-                  zoomControlsEnabled: false,
-                  onMapCreated: (controller) {
-                    mapController = controller;
-                  },
-                  markers: {
-                    Marker(
-                      markerId: const MarkerId("current_location"),
-                      position: currentLocation!,
-                      icon: _roundedMarker!,
-                      anchor: const Offset(0.5, 0.5),
-                    ),
+              // 🟢 REPLACED: GoogleMap is now FlutterMap
+              FlutterMap(
+                mapController: mapController,
+                options: MapOptions(
+                  initialCenter: currentLocation!,
+                  initialZoom: 17.5,
+                  onPointerDown: (_, __) {
+                    setState(() => _isTrackingCamera = false);
                   },
                 ),
+                children: [
+                  TileLayer(
+                    urlTemplate:
+                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    userAgentPackageName: 'com.example.safehorizon',
+                  ),
+                  MarkerLayer(
+                    markers: [
+                      Marker(
+                        point: currentLocation!,
+                        width: 60,
+                        height: 60,
+                        child: _buildGlowingMarker(),
+                      ),
+                    ],
+                  ),
+                ],
               ),
 
               Positioned(
@@ -228,39 +193,32 @@ class _DashboardScreenState extends State<DashboardScreen>
                     ],
                   ),
                   child: TextField(
-                    // 🟢 CHANGED: Now uses async OSRM Geocoding
                     onSubmitted: (value) async {
                       if (currentLocation != null && value.isNotEmpty) {
-                        // 1. Show a quick loading message
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(content: Text("Searching for '$value'...")),
                         );
 
-                        // 2. Fetch the REAL coordinates from Nominatim (OSRM)
-                        LatLng? realDestination =
+                        LatLng? realDest =
                             await OsrmService.getCoordinatesFromText(value);
 
                         if (!mounted) return;
 
-                        // 3. If found, go to the Preview Screen
-                        if (realDestination != null) {
+                        if (realDest != null) {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (_) => RoutePreviewScreen(
                                 startLocation: currentLocation!,
-                                destination: realDestination,
+                                destination: realDest,
                                 destinationName: value.toUpperCase(),
                               ),
                             ),
                           );
                         } else {
-                          // 4. If not found, tell the user
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text(
-                                "Could not find that location. Try again! ❌",
-                              ),
+                              content: Text("Could not find that location. ❌"),
                             ),
                           );
                         }
@@ -288,7 +246,10 @@ class _DashboardScreenState extends State<DashboardScreen>
                       backgroundColor: Colors.white,
                       child: const Icon(Icons.add, color: Colors.black87),
                       onPressed: () {
-                        mapController?.animateCamera(CameraUpdate.zoomIn());
+                        mapController.move(
+                          mapController.camera.center,
+                          mapController.camera.zoom + 1,
+                        );
                       },
                     ),
                     const SizedBox(height: 10),
@@ -298,7 +259,10 @@ class _DashboardScreenState extends State<DashboardScreen>
                       backgroundColor: Colors.white,
                       child: const Icon(Icons.remove, color: Colors.black87),
                       onPressed: () {
-                        mapController?.animateCamera(CameraUpdate.zoomOut());
+                        mapController.move(
+                          mapController.camera.center,
+                          mapController.camera.zoom - 1,
+                        );
                       },
                     ),
                     const SizedBox(height: 15),
@@ -315,24 +279,14 @@ class _DashboardScreenState extends State<DashboardScreen>
                         setState(() => _isTrackingCamera = true);
 
                         if (currentLocation != null) {
-                          mapController?.animateCamera(
-                            CameraUpdate.newCameraPosition(
-                              CameraPosition(
-                                target: currentLocation!,
-                                zoom: 19.5,
-                                tilt: 45.0,
-                              ),
-                            ),
-                          );
+                          mapController.move(currentLocation!, 17.5);
                         }
 
                         try {
                           Position pos = await Geolocator.getCurrentPosition(
                             desiredAccuracy: LocationAccuracy.high,
                           );
-                          LatLng freshLoc = LatLng(pos.latitude, pos.longitude);
-
-                          _animateMarkerTo(freshLoc);
+                          _animateMarkerTo(LatLng(pos.latitude, pos.longitude));
                         } catch (e) {
                           debugPrint("Manual GPS fetch failed: $e");
                         }

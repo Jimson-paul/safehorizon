@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:geolocator/geolocator.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:latlong2/latlong.dart'; // 🟢 Swapped to OpenStreetMap coordinates
 
 class LocationTrackingService {
   StreamSubscription<Position>? _positionStream;

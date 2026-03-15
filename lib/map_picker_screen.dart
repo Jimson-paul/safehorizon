@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 
 class MapPickerScreen extends StatefulWidget {
@@ -12,103 +13,102 @@ class MapPickerScreen extends StatefulWidget {
 class _MapPickerScreenState extends State<MapPickerScreen> {
   LatLng? selectedLocation;
   LatLng? currentLocation;
-
-  GoogleMapController? mapController;
-
-  // ================= GET GPS LOCATION =================
-  Future<void> getUserLocation() async {
-    try {
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-
-      if (!serviceEnabled) {
-        await Geolocator.openLocationSettings();
-        return;
-      }
-
-      LocationPermission permission = await Geolocator.checkPermission();
-
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-
-      if (permission == LocationPermission.deniedForever) {
-        return;
-      }
-
-      Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
-
-      currentLocation = LatLng(position.latitude, position.longitude);
-
-      setState(() {});
-    } catch (e) {
-      debugPrint("Location error: $e");
-    }
-  }
+  final MapController mapController = MapController();
 
   @override
   void initState() {
     super.initState();
-    getUserLocation();
+    _getCurrentLocation();
+  }
+
+  Future<void> _getCurrentLocation() async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) return;
+
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) return;
+    }
+
+    Position position = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    );
+
+    setState(() {
+      currentLocation = LatLng(position.latitude, position.longitude);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Select Location"),
+        title: const Text("Pick a Location"),
         backgroundColor: Colors.blue,
+        foregroundColor: Colors.white,
       ),
-
-      // WAIT UNTIL GPS LOADS
       body: currentLocation == null
           ? const Center(child: CircularProgressIndicator())
-          : GoogleMap(
-              initialCameraPosition: CameraPosition(
-                target: currentLocation!,
-                zoom: 17,
+          : FlutterMap(
+              mapController: mapController,
+              options: MapOptions(
+                initialCenter: currentLocation!,
+                initialZoom: 15.0,
+                onTap: (tapPosition, point) {
+                  setState(() {
+                    selectedLocation = point;
+                  });
+                },
               ),
-
-              onMapCreated: (controller) {
-                mapController = controller;
-              },
-
-              // TAP TO SELECT LOCATION
-              onTap: (LatLng point) {
-                setState(() {
-                  selectedLocation = point;
-                });
-              },
-
-              markers: {
-                // CURRENT LOCATION MARKER
-                Marker(
-                  markerId: const MarkerId("current_location"),
-                  position: currentLocation!,
-                  icon: BitmapDescriptor.defaultMarkerWithHue(
-                    BitmapDescriptor.hueBlue,
-                  ),
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.example.safe_horizon',
                 ),
-
-                // SELECTED LOCATION MARKER
-                if (selectedLocation != null)
-                  Marker(
-                    markerId: const MarkerId("selected_location"),
-                    position: selectedLocation!,
-                    icon: BitmapDescriptor.defaultMarkerWithHue(
-                      BitmapDescriptor.hueRed,
+                MarkerLayer(
+                  markers: [
+                    // Blue marker for current location
+                    Marker(
+                      point: currentLocation!,
+                      width: 50,
+                      height: 50,
+                      child: const Icon(
+                        Icons.my_location,
+                        color: Colors.blue,
+                        size: 40,
+                      ),
                     ),
-                  ),
-              },
+                    // Red marker for the tapped/selected location
+                    if (selectedLocation != null)
+                      Marker(
+                        point: selectedLocation!,
+                        width: 50,
+                        height: 50,
+                        child: const Icon(
+                          Icons.location_on,
+                          color: Colors.red,
+                          size: 40,
+                        ),
+                      ),
+                  ],
+                ),
+              ],
             ),
-
-      floatingActionButton: FloatingActionButton(
-        child: const Icon(Icons.check),
-        onPressed: () {
-          Navigator.pop(context, selectedLocation);
-        },
-      ),
+      floatingActionButton: selectedLocation != null
+          ? FloatingActionButton.extended(
+              onPressed: () {
+                // Return the selected location back to the previous screen
+                Navigator.pop(context, selectedLocation);
+              },
+              label: const Text(
+                "Confirm Location",
+                style: TextStyle(color: Colors.white),
+              ),
+              icon: const Icon(Icons.check, color: Colors.white),
+              backgroundColor: Colors.green,
+            )
+          : null,
     );
   }
 }
