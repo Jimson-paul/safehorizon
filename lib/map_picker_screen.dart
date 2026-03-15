@@ -64,7 +64,8 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
               children: [
                 TileLayer(
                   urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'com.example.safe_horizon',
+                  // 🟢 FIX: Changed from 'com.example.safe_horizon' to the unique name
+                  userAgentPackageName: 'dev.safehorizon.app',
                 ),
                 MarkerLayer(
                   markers: [

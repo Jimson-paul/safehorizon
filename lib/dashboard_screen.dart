@@ -161,7 +161,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                   TileLayer(
                     urlTemplate:
                         'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    userAgentPackageName: 'com.example.safehorizon',
+                    // 🟢 FIX: Changed from 'com.example.safehorizon' to a unique name
+                    userAgentPackageName: 'dev.safehorizon.app',
                   ),
                   MarkerLayer(
                     markers: [

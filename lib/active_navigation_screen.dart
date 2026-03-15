@@ -56,6 +56,11 @@ class _ActiveNavigationScreenState extends State<ActiveNavigationScreen>
   LatLng? _animatedLocation;
   LatLng? _targetLocation;
 
+  // 🟢 NEW: Turn-by-Turn State
+  int _currentStepIndex = 0;
+  String _currentInstruction = "Proceed to route";
+  double _distanceToNextTurn = 0.0;
+
   // Heading State
   double _animatedHeading = 0.0;
   double _targetHeading = 0.0;
@@ -66,8 +71,6 @@ class _ActiveNavigationScreenState extends State<ActiveNavigationScreen>
   bool _isRerouting = false;
   bool _hasInitialGpsLock = false;
   DateTime _lastRerouteTime = DateTime.fromMillisecondsSinceEpoch(0);
-
-  // 🟢 NEW: Tracks the exact time of the last GPS ping
   DateTime? _lastGpsUpdateTime;
 
   // Styling
@@ -80,9 +83,11 @@ class _ActiveNavigationScreenState extends State<ActiveNavigationScreen>
     _routePoints = widget.initialRoutePoints;
     _animatedLocation = widget.startLocation;
 
-    _navAssistant.setRouteSteps(widget.initialInstructions);
+    // Set initial instruction if available
+    if (widget.initialInstructions.isNotEmpty) {
+      _currentInstruction = widget.initialInstructions.first.instruction;
+    }
 
-    // Initial default is 1000ms, but this will be overridden dynamically
     _animationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1000),
@@ -172,7 +177,15 @@ class _ActiveNavigationScreenState extends State<ActiveNavigationScreen>
       if (routeData != null) {
         setState(() {
           _routePoints = routeData['points'];
-          _navAssistant.setRouteSteps(routeData['steps'] ?? []);
+          _navAssistant
+              .clearMemory(); // 🟢 FIX: Clears TTS memory for new route
+
+          // Reset turn-by-turn state for new route
+          _currentStepIndex = 0;
+          if (routeData['steps'] != null && routeData['steps'].isNotEmpty) {
+            _currentInstruction = routeData['steps'][0].instruction;
+          }
+
           _isRerouting = false;
           _lastRerouteTime = DateTime.now();
         });
@@ -184,65 +197,165 @@ class _ActiveNavigationScreenState extends State<ActiveNavigationScreen>
     }
   }
 
-  // --- 3. GPS STREAM HANDLER ---
+  // --- 3. GPS STREAM HANDLER & UI UPDATES ---
 
   Future<void> _startLocationTracking() async {
-    // 🟢 THE FIX: Removed distanceFilter completely.
-    // We want raw, purely time-based updates as fast as the device can send them.
     const LocationSettings settings = LocationSettings(
       accuracy: LocationAccuracy.bestForNavigation,
     );
 
-    _positionStream = Geolocator.getPositionStream(locationSettings: settings).listen((
-      Position pos,
-    ) {
-      if (!mounted) return;
+    _positionStream = Geolocator.getPositionStream(locationSettings: settings)
+        .listen((Position pos) {
+          if (!mounted) return;
 
-      LatLng rawGpsLocation = LatLng(pos.latitude, pos.longitude);
-      DateTime now = DateTime.now();
+          LatLng rawGpsLocation = LatLng(pos.latitude, pos.longitude);
 
-      if (!_hasInitialGpsLock) {
-        _hasInitialGpsLock = true;
-        _animatedLocation = rawGpsLocation;
-      } else if (_isUserOffTrack(rawGpsLocation)) {
-        _triggerReroute(rawGpsLocation);
-      }
+          // 🟢 APPLY SNAP-TO-ROUTE MATH HERE!
+          LatLng snappedLocation = _snapToRoute(rawGpsLocation);
 
-      // 🟢 DYNAMIC LATENCY CALCULATION
-      // Measure exactly how many milliseconds it has been since the last update
-      int durationMs = 1200; // Safe default
-      if (_lastGpsUpdateTime != null) {
-        int pingDelta = now.difference(_lastGpsUpdateTime!).inMilliseconds;
-        // Add a 20% "buffer" so the marker stays slightly behind and never stops
-        durationMs = (pingDelta * 1.2).clamp(1000, 5000).toInt();
-      }
-      _lastGpsUpdateTime = now;
+          DateTime now = DateTime.now();
 
-      // Prepare animation states
-      LatLng animationStart = _animatedLocation ?? rawGpsLocation;
-      _oldHeading = _animatedHeading;
-      _targetLocation = rawGpsLocation;
+          if (!_hasInitialGpsLock) {
+            _hasInitialGpsLock = true;
+            _animatedLocation = snappedLocation;
+          } else if (_isUserOffTrack(rawGpsLocation)) {
+            _triggerReroute(rawGpsLocation);
+          }
 
-      if (pos.heading > 0) {
-        _targetHeading = pos.heading;
-      }
+          // 🟢 NEW: TURN-BY-TURN LOGIC
+          if (widget.initialInstructions.isNotEmpty &&
+              _currentStepIndex < widget.initialInstructions.length) {
+            RouteStep nextStep = widget.initialInstructions[_currentStepIndex];
 
-      _latLngTween = LatLngTween(begin: animationStart, end: _targetLocation!);
-      _animationController.value = 0.0;
+            // Calculate distance to the exact coordinate of the next turn
+            double distance = Geolocator.distanceBetween(
+              snappedLocation.latitude, // Use snapped for smoother tracking
+              snappedLocation.longitude,
+              nextStep.location.latitude,
+              nextStep.location.longitude,
+            );
 
-      // Pass the dynamically calculated duration!
-      _animationController.animateTo(
-        1.0,
-        duration: Duration(milliseconds: durationMs),
-        curve: Curves.linear,
-      );
+            // If we are within 15 meters, we consider the turn "completed"
+            if (distance < 15) {
+              _currentStepIndex++;
+            }
 
-      // Feed Voice Assistant
-      _navAssistant.processLocationUpdate(rawGpsLocation);
-    });
+            // Update the UI
+            setState(() {
+              _distanceToNextTurn = distance;
+              if (_currentStepIndex < widget.initialInstructions.length) {
+                _currentInstruction =
+                    widget.initialInstructions[_currentStepIndex].instruction;
+              } else {
+                _currentInstruction = "You have arrived at your destination!";
+                _distanceToNextTurn = 0.0;
+              }
+            });
+          }
+
+          // 🟢 DYNAMIC LATENCY CALCULATION
+          int durationMs = 1200;
+          if (_lastGpsUpdateTime != null) {
+            int pingDelta = now.difference(_lastGpsUpdateTime!).inMilliseconds;
+            durationMs = (pingDelta * 1.2).clamp(1000, 5000).toInt();
+          }
+          _lastGpsUpdateTime = now;
+
+          LatLng animationStart = _animatedLocation ?? snappedLocation;
+          _oldHeading = _animatedHeading;
+
+          // 🟢 ANIMATE TO THE SNAPPED LOCATION, NOT THE RAW GPS
+          _targetLocation = snappedLocation;
+
+          if (pos.heading > 0) {
+            _targetHeading = pos.heading;
+          }
+
+          _latLngTween = LatLngTween(
+            begin: animationStart,
+            end: _targetLocation!,
+          );
+          _animationController.value = 0.0;
+
+          _animationController.animateTo(
+            1.0,
+            duration: Duration(milliseconds: durationMs),
+            curve: Curves.linear,
+          );
+
+          // 🟢 FIX: Trigger the exact instruction logic via TTS
+          _navAssistant.announceInstruction(
+            _currentInstruction,
+            _distanceToNextTurn,
+          );
+        });
   }
 
-  // --- 4. UI BUILDER ---
+  // --- 4. ICON HELPER ---
+
+  IconData _getTurnIcon(String instruction) {
+    final lowerInst = instruction.toLowerCase();
+    if (lowerInst.contains("left")) return Icons.turn_left;
+    if (lowerInst.contains("right")) return Icons.turn_right;
+    if (lowerInst.contains("u-turn")) return Icons.u_turn_left;
+    if (lowerInst.contains("roundabout")) return Icons.roundabout_right;
+    if (lowerInst.contains("arrive") || lowerInst.contains("destination"))
+      return Icons.flag;
+    return Icons.straight;
+  }
+
+  // --- 4.5 SNAP TO ROUTE LOGIC ---
+
+  LatLng _snapToRoute(LatLng rawLocation) {
+    if (_routePoints.isEmpty) return rawLocation;
+
+    double minDistance = double.infinity;
+    LatLng snappedPoint = rawLocation;
+
+    for (int i = 0; i < _routePoints.length - 1; i++) {
+      LatLng start = _routePoints[i];
+      LatLng end = _routePoints[i + 1];
+
+      LatLng projected = _projectPointOnSegment(rawLocation, start, end);
+
+      double dist = Geolocator.distanceBetween(
+        rawLocation.latitude,
+        rawLocation.longitude,
+        projected.latitude,
+        projected.longitude,
+      );
+
+      if (dist < minDistance) {
+        minDistance = dist;
+        snappedPoint = projected;
+      }
+    }
+
+    // Threshold: 35 meters.
+    // If they are more than 35m off the blue line, show the real, raw GPS point.
+    if (minDistance <= 35) {
+      return snappedPoint;
+    }
+
+    return rawLocation;
+  }
+
+  LatLng _projectPointOnSegment(LatLng p, LatLng a, LatLng b) {
+    double apX = p.longitude - a.longitude;
+    double apY = p.latitude - a.latitude;
+    double abX = b.longitude - a.longitude;
+    double abY = b.latitude - a.latitude;
+
+    double ab2 = abX * abX + abY * abY;
+    if (ab2 == 0) return a; // a and b are the same point
+
+    double t = (apX * abX + apY * abY) / ab2;
+    t = t.clamp(0.0, 1.0); // Clamp to the segment bounds
+
+    return LatLng(a.latitude + t * abY, a.longitude + t * abX);
+  }
+
+  // --- 5. UI BUILDER ---
 
   @override
   Widget build(BuildContext context) {
@@ -309,34 +422,73 @@ class _ActiveNavigationScreenState extends State<ActiveNavigationScreen>
             ],
           ),
 
-          // TOP HEADER
+          // 🟢 NEW: TURN-BY-TURN BANNER
           Align(
             alignment: Alignment.topCenter,
             child: Container(
               width: double.infinity,
-              color: primaryBlue,
-              padding: EdgeInsets.only(
-                top: MediaQuery.of(context).padding.top + 16,
-                bottom: 16,
+              margin: EdgeInsets.only(
+                top: MediaQuery.of(context).padding.top + 10,
+                left: 16,
+                right: 16,
               ),
-              child: Stack(
-                alignment: Alignment.center,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: darkBlue,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 10,
+                    offset: Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
                 children: [
-                  Positioned(
-                    left: 8,
-                    top: -4,
-                    child: IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white),
-                      onPressed: () => Navigator.pop(context),
+                  // Direction Icon
+                  Icon(
+                    _getTurnIcon(_currentInstruction),
+                    color: Colors.white,
+                    size: 40,
+                  ),
+                  const SizedBox(width: 16),
+
+                  // Instruction & Distance Text
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _distanceToNextTurn > 1000
+                              ? "${(_distanceToNextTurn / 1000).toStringAsFixed(1)} km"
+                              : "${_distanceToNextTurn.toStringAsFixed(0)} m",
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _currentInstruction,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            color: Colors.white70,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ),
                   ),
-                  const Text(
-                    "Navigating",
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
+
+                  // Close Button
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white),
+                    onPressed: () => Navigator.pop(context),
                   ),
                 ],
               ),
