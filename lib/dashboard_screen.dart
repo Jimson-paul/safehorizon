@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart'; // 🟢 Added flutter_map
-import 'package:latlong2/latlong.dart'; // 🟢 Added latlong2
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'route_preview_screen.dart';
 import 'services/map_matching_service.dart';
@@ -32,7 +32,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   bool _isTrackingCamera = true;
 
   LatLng? currentLocation;
-  final MapController mapController = MapController(); // 🟢 Updated Controller
+  final MapController mapController = MapController();
   final LocationTrackingService locationService = LocationTrackingService();
   DateTime? _lastApiCallTime;
 
@@ -63,7 +63,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
 
     if (_isTrackingCamera) {
-      // 🟢 Moves the flutter_map camera
       mapController.move(targetLocation, mapController.camera.zoom);
     }
 
@@ -118,7 +117,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     return 2;
   }
 
-  // 🟢 NEW: Clean Flutter widget for your custom marker!
   Widget _buildGlowingMarker() {
     return Container(
       decoration: BoxDecoration(
@@ -147,7 +145,6 @@ class _DashboardScreenState extends State<DashboardScreen>
         ? const Center(child: CircularProgressIndicator())
         : Stack(
             children: [
-              // 🟢 REPLACED: GoogleMap is now FlutterMap
               FlutterMap(
                 mapController: mapController,
                 options: MapOptions(
@@ -161,7 +158,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                   TileLayer(
                     urlTemplate:
                         'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    // 🟢 FIX: Changed from 'com.example.safehorizon' to a unique name
                     userAgentPackageName: 'dev.safehorizon.app',
                   ),
                   MarkerLayer(
@@ -177,6 +173,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 ],
               ),
 
+              // 🟢 THE NEW AUTOCOMPLETE SEARCH BAR
               Positioned(
                 top: MediaQuery.of(context).padding.top + 20,
                 left: 20,
@@ -193,45 +190,107 @@ class _DashboardScreenState extends State<DashboardScreen>
                       ),
                     ],
                   ),
-                  child: TextField(
-                    onSubmitted: (value) async {
-                      if (currentLocation != null && value.isNotEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text("Searching for '$value'...")),
+                  child: Autocomplete<Map<String, dynamic>>(
+                    // 1. Fetch data from Geoapify
+                    optionsBuilder: (TextEditingValue textEditingValue) async {
+                      if (textEditingValue.text.length < 3) {
+                        return const Iterable<Map<String, dynamic>>.empty();
+                      }
+                      return await OsrmService.getAutocompleteSuggestions(
+                        textEditingValue.text,
+                      );
+                    },
+
+                    // 2. String to display
+                    displayStringForOption: (option) =>
+                        option['formatted'] as String,
+
+                    // 3. Action when user taps a suggestion
+                    onSelected: (Map<String, dynamic> selection) {
+                      if (currentLocation != null) {
+                        final destLatLng = LatLng(
+                          selection['lat'],
+                          selection['lon'],
                         );
+                        final destName = selection['formatted'];
 
-                        LatLng? realDest =
-                            await OsrmService.getCoordinatesFromText(value);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => RoutePreviewScreen(
+                              startLocation: currentLocation!,
+                              destination: destLatLng,
+                              // Just grab the primary city/location name before the comma
+                              destinationName: destName
+                                  .toString()
+                                  .split(',')[0]
+                                  .toUpperCase(),
+                            ),
+                          ),
+                        );
+                      }
+                    },
 
-                        if (!mounted) return;
-
-                        if (realDest != null) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => RoutePreviewScreen(
-                                startLocation: currentLocation!,
-                                destination: realDest,
-                                destinationName: value.toUpperCase(),
+                    // 4. Customizing the Search Bar UI
+                    fieldViewBuilder:
+                        (context, controller, focusNode, onEditingComplete) {
+                          return TextField(
+                            controller: controller,
+                            focusNode: focusNode,
+                            decoration: InputDecoration(
+                              hintText: "Search Destination (e.g. Kottayam)...",
+                              hintStyle: TextStyle(color: Colors.grey.shade400),
+                              prefixIcon: const Icon(
+                                Icons.search,
+                                color: Colors.blue,
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(
+                                vertical: 15,
                               ),
                             ),
                           );
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text("Could not find that location. ❌"),
+                        },
+
+                    // 5. Customizing the dropdown list
+                    optionsViewBuilder: (context, onSelected, options) {
+                      return Align(
+                        alignment: Alignment.topLeft,
+                        child: Material(
+                          elevation: 8,
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            width: MediaQuery.of(context).size.width - 40,
+                            constraints: const BoxConstraints(maxHeight: 250),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(20),
                             ),
-                          );
-                        }
-                      }
+                            child: ListView.builder(
+                              padding: EdgeInsets.zero,
+                              shrinkWrap: true,
+                              itemCount: options.length,
+                              itemBuilder: (context, index) {
+                                final option = options.elementAt(index);
+                                return ListTile(
+                                  leading: const Icon(
+                                    Icons.location_on_outlined,
+                                    color: Colors.blue,
+                                  ),
+                                  title: Text(
+                                    option['formatted'],
+                                    style: const TextStyle(fontSize: 14),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  onTap: () => onSelected(option),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      );
                     },
-                    decoration: InputDecoration(
-                      hintText: "Search Destination...",
-                      hintStyle: TextStyle(color: Colors.grey.shade400),
-                      prefixIcon: const Icon(Icons.search, color: Colors.blue),
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 15),
-                    ),
                   ),
                 ),
               ),

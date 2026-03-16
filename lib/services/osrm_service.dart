@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 import 'package:flutter/material.dart';
 
-// 🟢 A simple class to hold our turn-by-turn data
+// A simple class to hold our turn-by-turn data
 class RouteStep {
   final LatLng location;
   final String instruction;
@@ -12,9 +12,10 @@ class RouteStep {
 }
 
 class OsrmService {
-  // 🟢 PASTE YOUR ORS API KEY HERE
+  // 🟢 YOUR API KEYS
   static const String _orsApiKey =
       'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImRlNTEyNmVlNDhmMTQzOTg5MTMyYTAwNDhjMDc1OTI4IiwiaCI6Im11cm11cjY0In0=';
+  static const String _geoapifyKey = "fd24e74b5e854fa4981cdd39f8452044";
 
   // ==========================================
   // 1. ROUTING (Using high-speed ORS API)
@@ -51,7 +52,6 @@ class OsrmService {
           final stepsList = segments[0]['steps'] as List;
 
           for (var step in stepsList) {
-            // ORS gives 'way_points' linking the instruction to a specific coordinate
             int coordIndex = step['way_points'][0];
             String instruction = step['instruction'];
 
@@ -68,12 +68,10 @@ class OsrmService {
           'points': points,
           'distance': '${distanceKm.toStringAsFixed(1)} km',
           'time': '$durationMin min',
-          'steps': turnByTurnSteps, // Pass the steps back to the UI!
+          'steps': turnByTurnSteps,
         };
       } else {
-        debugPrint(
-          "❌ ORS API Error: ${response.statusCode} - ${response.body}",
-        );
+        debugPrint("❌ ORS API Error: ${response.statusCode}");
       }
     } catch (e) {
       debugPrint("❌ Failed to fetch ORS route: $e");
@@ -85,7 +83,6 @@ class OsrmService {
   // 2. SEARCH BAR (Using Nominatim OSM)
   // ==========================================
   static Future<LatLng?> getCoordinatesFromText(String query) async {
-    // 🟢 Encode the search query so spaces don't break the URL
     final String encodedQuery = Uri.encodeComponent(query);
     final String url =
         'https://nominatim.openstreetmap.org/search?q=$encodedQuery&format=json&limit=1';
@@ -93,7 +90,6 @@ class OsrmService {
     try {
       final response = await http.get(
         Uri.parse(url),
-        // 🟢 Give Nominatim a clear User-Agent so they don't block you
         headers: {
           'User-Agent': 'SafeHorizonApp/1.0 (Flutter Demo)',
           'Accept-Language': 'en-US,en;q=0.9',
@@ -108,17 +104,42 @@ class OsrmService {
             double.parse(data[0]['lat']),
             double.parse(data[0]['lon']),
           );
-        } else {
-          debugPrint("❌ Nominatim could not find: $query");
         }
-      } else {
-        debugPrint(
-          "❌ Nominatim API Error: ${response.statusCode} - ${response.body}",
-        );
       }
     } catch (e) {
       debugPrint("❌ Search Geocoding failed: $e");
     }
     return null;
+  }
+
+  // ==========================================
+  // 3. AUTOCOMPLETE (Using Geoapify)
+  // ==========================================
+  static Future<List<Map<String, dynamic>>> getAutocompleteSuggestions(
+    String query,
+  ) async {
+    final String encodedQuery = Uri.encodeComponent(query);
+    final String url =
+        'https://api.geoapify.com/v1/geocode/autocomplete?text=$encodedQuery&apiKey=$_geoapifyKey&limit=5';
+
+    try {
+      final response = await http.get(Uri.parse(url));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final features = data['features'] as List;
+
+        return features.map((f) {
+          return {
+            'formatted': f['properties']['formatted'],
+            'lat': f['properties']['lat'],
+            'lon': f['properties']['lon'],
+          };
+        }).toList();
+      }
+    } catch (e) {
+      debugPrint("Autocomplete API failed: $e");
+    }
+    return [];
   }
 }
