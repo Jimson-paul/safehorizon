@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' show pi;
+import '../widgets/poi_action_buttons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -61,6 +62,9 @@ class _ActiveNavigationScreenState extends State<ActiveNavigationScreen>
   int _currentStepIndex = 0;
   String _currentInstruction = "Proceed to route";
   double _distanceToNextTurn = 0.0;
+
+  // 🟢 NEW: Point of Interest (POI) Marker State
+  List<Marker> _poiMarkers = [];
 
   // Heading State
   double _animatedHeading = 0.0;
@@ -387,6 +391,7 @@ class _ActiveNavigationScreenState extends State<ActiveNavigationScreen>
                 ),
               MarkerLayer(
                 markers: [
+                  ..._poiMarkers, // 🟢 Render the external POI markers here!
                   Marker(
                     point: _animatedLocation ?? widget.startLocation,
                     width: 60,
@@ -485,6 +490,18 @@ class _ActiveNavigationScreenState extends State<ActiveNavigationScreen>
                   ),
                 ],
               ),
+            ),
+          ),
+
+          // 🟢 NEW: Clean, external POI Buttons Component
+          Positioned(
+            right: 16,
+            top: 180,
+            child: PoiActionButtons(
+              currentLocation: _animatedLocation,
+              onMarkersUpdated: (newMarkers) {
+                setState(() => _poiMarkers = newMarkers);
+              },
             ),
           ),
 
