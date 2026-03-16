@@ -56,7 +56,8 @@ class _ActiveNavigationScreenState extends State<ActiveNavigationScreen>
   LatLng? _animatedLocation;
   LatLng? _targetLocation;
 
-  // 🟢 NEW: Turn-by-Turn State
+  // 🟢 Turn-by-Turn State
+  late List<RouteStep> _currentRouteSteps;
   int _currentStepIndex = 0;
   String _currentInstruction = "Proceed to route";
   double _distanceToNextTurn = 0.0;
@@ -82,10 +83,11 @@ class _ActiveNavigationScreenState extends State<ActiveNavigationScreen>
     super.initState();
     _routePoints = widget.initialRoutePoints;
     _animatedLocation = widget.startLocation;
+    _currentRouteSteps = widget.initialInstructions;
 
     // Set initial instruction if available
-    if (widget.initialInstructions.isNotEmpty) {
-      _currentInstruction = widget.initialInstructions.first.instruction;
+    if (_currentRouteSteps.isNotEmpty) {
+      _currentInstruction = _currentRouteSteps.first.instruction;
     }
 
     _animationController = AnimationController(
@@ -118,6 +120,9 @@ class _ActiveNavigationScreenState extends State<ActiveNavigationScreen>
         _targetHeading,
         _animationController.value,
       );
+
+      // 🟢 SYNCS THE TURN BANNER TO THE ANIMATED MARKER
+      _updateTurnGuidanceUI(_animatedLocation!);
     });
 
     if (_isMapLocked && _animatedLocation != null) {
@@ -132,6 +137,35 @@ class _ActiveNavigationScreenState extends State<ActiveNavigationScreen>
   double _lerpAngle(double a, double b, double t) {
     double delta = ((b - a + 180) % 360) - 180;
     return (a + delta * t) % 360;
+  }
+
+  // 🟢 NEW: Math to update the banner distance and flip to the next instruction
+  void _updateTurnGuidanceUI(LatLng currentMarkerPos) {
+    if (_currentRouteSteps.isEmpty) return;
+
+    if (_currentStepIndex >= _currentRouteSteps.length) {
+      _currentInstruction = "You have arrived at your destination!";
+      _distanceToNextTurn = 0.0;
+      return;
+    }
+
+    final currentStep = _currentRouteSteps[_currentStepIndex];
+
+    // Calculate the distance from the animated car to the intersection
+    double distance = Geolocator.distanceBetween(
+      currentMarkerPos.latitude,
+      currentMarkerPos.longitude,
+      currentStep.location.latitude,
+      currentStep.location.longitude,
+    );
+
+    _distanceToNextTurn = distance;
+    _currentInstruction = currentStep.instruction;
+
+    // If the car gets within 15 meters of the turn, jump to the next instruction
+    if (distance < 15.0) {
+      _currentStepIndex++;
+    }
   }
 
   // --- 2. REROUTING LOGIC ---
@@ -150,19 +184,12 @@ class _ActiveNavigationScreenState extends State<ActiveNavigationScreen>
       if (distance < minDistance) minDistance = distance;
     }
 
-    if (minDistance > 50) {
-      debugPrint(
-        "📏 GPS is ${minDistance.toStringAsFixed(0)}m away from route.",
-      );
-    }
-
     return minDistance > 100; // 100-meter virtual fence
   }
 
   Future<void> _triggerReroute(LatLng newLocation) async {
     if (_isRerouting) return;
-    if (DateTime.now().difference(_lastRerouteTime).inSeconds < 10)
-      return; // 10s Cooldown
+    if (DateTime.now().difference(_lastRerouteTime).inSeconds < 10) return;
 
     setState(() => _isRerouting = true);
     _navAssistant.stop();
@@ -177,13 +204,13 @@ class _ActiveNavigationScreenState extends State<ActiveNavigationScreen>
       if (routeData != null) {
         setState(() {
           _routePoints = routeData['points'];
-          _navAssistant
-              .clearMemory(); // 🟢 FIX: Clears TTS memory for new route
+          _navAssistant.clearMemory();
 
-          // Reset turn-by-turn state for new route
+          // 🟢 Reset turn-by-turn state for new route
+          _currentRouteSteps = routeData['steps'] ?? [];
           _currentStepIndex = 0;
-          if (routeData['steps'] != null && routeData['steps'].isNotEmpty) {
-            _currentInstruction = routeData['steps'][0].instruction;
+          if (_currentRouteSteps.isNotEmpty) {
+            _currentInstruction = _currentRouteSteps[0].instruction;
           }
 
           _isRerouting = false;
@@ -210,7 +237,7 @@ class _ActiveNavigationScreenState extends State<ActiveNavigationScreen>
 
           LatLng rawGpsLocation = LatLng(pos.latitude, pos.longitude);
 
-          // 🟢 APPLY SNAP-TO-ROUTE MATH HERE!
+          // Apply Snap-to-Route
           LatLng snappedLocation = _snapToRoute(rawGpsLocation);
 
           DateTime now = DateTime.now();
@@ -222,38 +249,7 @@ class _ActiveNavigationScreenState extends State<ActiveNavigationScreen>
             _triggerReroute(rawGpsLocation);
           }
 
-          // 🟢 NEW: TURN-BY-TURN LOGIC
-          if (widget.initialInstructions.isNotEmpty &&
-              _currentStepIndex < widget.initialInstructions.length) {
-            RouteStep nextStep = widget.initialInstructions[_currentStepIndex];
-
-            // Calculate distance to the exact coordinate of the next turn
-            double distance = Geolocator.distanceBetween(
-              snappedLocation.latitude, // Use snapped for smoother tracking
-              snappedLocation.longitude,
-              nextStep.location.latitude,
-              nextStep.location.longitude,
-            );
-
-            // If we are within 15 meters, we consider the turn "completed"
-            if (distance < 15) {
-              _currentStepIndex++;
-            }
-
-            // Update the UI
-            setState(() {
-              _distanceToNextTurn = distance;
-              if (_currentStepIndex < widget.initialInstructions.length) {
-                _currentInstruction =
-                    widget.initialInstructions[_currentStepIndex].instruction;
-              } else {
-                _currentInstruction = "You have arrived at your destination!";
-                _distanceToNextTurn = 0.0;
-              }
-            });
-          }
-
-          // 🟢 DYNAMIC LATENCY CALCULATION
+          // DYNAMIC LATENCY CALCULATION
           int durationMs = 1200;
           if (_lastGpsUpdateTime != null) {
             int pingDelta = now.difference(_lastGpsUpdateTime!).inMilliseconds;
@@ -263,8 +259,6 @@ class _ActiveNavigationScreenState extends State<ActiveNavigationScreen>
 
           LatLng animationStart = _animatedLocation ?? snappedLocation;
           _oldHeading = _animatedHeading;
-
-          // 🟢 ANIMATE TO THE SNAPPED LOCATION, NOT THE RAW GPS
           _targetLocation = snappedLocation;
 
           if (pos.heading > 0) {
@@ -283,7 +277,7 @@ class _ActiveNavigationScreenState extends State<ActiveNavigationScreen>
             curve: Curves.linear,
           );
 
-          // 🟢 FIX: Trigger the exact instruction logic via TTS
+          // Trigger TTS
           _navAssistant.announceInstruction(
             _currentInstruction,
             _distanceToNextTurn,
@@ -299,8 +293,9 @@ class _ActiveNavigationScreenState extends State<ActiveNavigationScreen>
     if (lowerInst.contains("right")) return Icons.turn_right;
     if (lowerInst.contains("u-turn")) return Icons.u_turn_left;
     if (lowerInst.contains("roundabout")) return Icons.roundabout_right;
-    if (lowerInst.contains("arrive") || lowerInst.contains("destination"))
+    if (lowerInst.contains("arrive") || lowerInst.contains("destination")) {
       return Icons.flag;
+    }
     return Icons.straight;
   }
 
@@ -331,8 +326,6 @@ class _ActiveNavigationScreenState extends State<ActiveNavigationScreen>
       }
     }
 
-    // Threshold: 35 meters.
-    // If they are more than 35m off the blue line, show the real, raw GPS point.
     if (minDistance <= 35) {
       return snappedPoint;
     }
@@ -347,10 +340,10 @@ class _ActiveNavigationScreenState extends State<ActiveNavigationScreen>
     double abY = b.latitude - a.latitude;
 
     double ab2 = abX * abX + abY * abY;
-    if (ab2 == 0) return a; // a and b are the same point
+    if (ab2 == 0) return a;
 
     double t = (apX * abX + apY * abY) / ab2;
-    t = t.clamp(0.0, 1.0); // Clamp to the segment bounds
+    t = t.clamp(0.0, 1.0);
 
     return LatLng(a.latitude + t * abY, a.longitude + t * abX);
   }
@@ -422,7 +415,7 @@ class _ActiveNavigationScreenState extends State<ActiveNavigationScreen>
             ],
           ),
 
-          // 🟢 NEW: TURN-BY-TURN BANNER
+          // TURN-BY-TURN BANNER
           Align(
             alignment: Alignment.topCenter,
             child: Container(
